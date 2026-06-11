@@ -35,3 +35,5 @@ jobs:
         with:
           files: Wallsy-*.dmg
           generate_release_notes: true
+          draft: false
+          make_latest: "true"
