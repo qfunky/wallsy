@@ -1,0 +1,37 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: macos-15 # Apple Silicon runner
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build (Release, unsigned)
+        run: |
+          xcodebuild -project NaviPlay.xcodeproj \
+            -scheme NaviPlay \
+            -configuration Release \
+            -derivedDataPath DerivedData \
+            CODE_SIGN_IDENTITY="-" \
+            CODE_SIGNING_REQUIRED=NO \
+            DEVELOPMENT_TEAM="" \
+            build
+
+      - name: Package DMG
+        run: |
+          chmod +x scripts/make_dmg.sh
+          ./scripts/make_dmg.sh "${GITHUB_REF_NAME}" "DerivedData/Build/Products/Release/Wallsy.app"
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: Wallsy-*.dmg
+          generate_release_notes: true
