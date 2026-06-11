@@ -180,6 +180,10 @@ final class SubsonicClient {
         try await request("getAlbum", params: ["id": id], as: AlbumPayload.self).album
     }
 
+    func song(id: String) async throws -> Song {
+        try await request("getSong", params: ["id": id], as: SongPayload.self).song
+    }
+
     func artists() async throws -> [ArtistIndex] {
         try await request("getArtists", as: ArtistsPayload.self).artists.index ?? []
     }

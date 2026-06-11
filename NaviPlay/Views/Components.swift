@@ -189,6 +189,7 @@ struct TrackRow: View {
     @EnvironmentObject private var app: AppState
     @EnvironmentObject private var player: PlayerController
     @EnvironmentObject private var router: Router
+    @EnvironmentObject private var downloads: DownloadManager
 
     let song: Song
     let index: Int
@@ -204,6 +205,28 @@ struct TrackRow: View {
 
     private var isCurrent: Bool {
         player.currentSong?.id == song.id
+    }
+
+    /// Small status indicator: queued / downloading / available offline.
+    @ViewBuilder
+    private var downloadBadge: some View {
+        switch downloads.status(for: song) {
+        case .cached:
+            Image(systemName: "arrow.down.circle.fill")
+                .font(.system(size: 11))
+                .foregroundColor(.spGreen)
+                .help("Available offline")
+        case .downloading(let progress):
+            DownloadProgressCircle(progress: progress)
+                .help("Downloading…")
+        case .queued:
+            Image(systemName: "clock")
+                .font(.system(size: 11))
+                .foregroundColor(.spSubtext)
+                .help("Queued for download")
+        case .notCached:
+            EmptyView()
+        }
     }
 
     var body: some View {
@@ -265,6 +288,9 @@ struct TrackRow: View {
             }
             .buttonStyle(.plain)
             .opacity(hovering || app.isStarred(song) ? 1 : 0)
+
+            downloadBadge
+                .frame(width: 16)
 
             Text(formatTime(Double(song.duration ?? 0)))
                 .font(.system(size: 12))
@@ -435,6 +461,47 @@ struct SeekBar: View {
         }
         .frame(height: 12)
         .onHover { hovering = $0 }
+    }
+}
+
+// MARK: - Download progress widgets
+
+/// Tiny circular progress ring for a single downloading track.
+struct DownloadProgressCircle: View {
+    var progress: Double
+    var size: CGFloat = 12
+
+    var body: some View {
+        ZStack {
+            Circle()
+                .stroke(Color.white.opacity(0.2), lineWidth: 2)
+            Circle()
+                .trim(from: 0, to: max(progress, 0.03))
+                .stroke(Color.spGreen, style: StrokeStyle(lineWidth: 2, lineCap: .round))
+                .rotationEffect(.degrees(-90))
+        }
+        .frame(width: size, height: size)
+        .animation(.linear(duration: 0.2), value: progress)
+    }
+}
+
+/// Batch progress bar shown while a download queue is being processed.
+struct DownloadProgressView: View {
+    @EnvironmentObject private var downloads: DownloadManager
+
+    var body: some View {
+        if downloads.batchTotal > 0 {
+            HStack(spacing: 8) {
+                ProgressView(value: downloads.batchProgress)
+                    .progressViewStyle(.linear)
+                    .tint(.spGreen)
+                    .frame(width: 140)
+                Text("\(downloads.batchDone)/\(downloads.batchTotal)")
+                    .font(.system(size: 11))
+                    .foregroundColor(.spSubtext)
+                    .monospacedDigit()
+            }
+        }
     }
 }
 

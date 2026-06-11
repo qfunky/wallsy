@@ -106,14 +106,7 @@ struct SettingsView: View {
                     .disabled(downloads.cachedFiles.isEmpty)
                 }
 
-                if downloads.activeCount > 0 {
-                    HStack(spacing: 6) {
-                        ProgressView().controlSize(.small)
-                        Text("Downloading \(downloads.activeCount) track(s)…")
-                            .font(.system(size: 11))
-                            .foregroundColor(.spSubtext)
-                    }
-                }
+                DownloadProgressView()
 
                 if let error = downloads.lastError {
                     Text(error)

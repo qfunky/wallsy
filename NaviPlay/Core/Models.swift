@@ -103,6 +103,10 @@ struct AlbumPayload: Decodable {
     let album: Album
 }
 
+struct SongPayload: Decodable {
+    let song: Song
+}
+
 struct ArtistsPayload: Decodable {
     let artists: Container
 

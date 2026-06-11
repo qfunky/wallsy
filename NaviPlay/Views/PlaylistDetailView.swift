@@ -133,15 +133,7 @@ struct PlaylistDetailView: View {
             .menuStyle(.borderlessButton)
             .fixedSize()
 
-            if downloads.activeCount > 0 {
-                HStack(spacing: 6) {
-                    ProgressView()
-                        .controlSize(.small)
-                    Text("Downloading \(downloads.activeCount)…")
-                        .font(.system(size: 11))
-                        .foregroundColor(.spSubtext)
-                }
-            }
+            DownloadProgressView()
 
             Spacer()
 
@@ -284,6 +276,7 @@ struct LikedSongsView: View {
                         .buttonStyle(.plain)
                         .disabled(songs.isEmpty)
                     }
+                    DownloadProgressView()
                 }
 
                 if loaded && songs.isEmpty {

@@ -51,8 +51,11 @@ struct DownloadsView: View {
                 }
 
                 if !songs.isEmpty {
-                    PlayCircleButton(diameter: 52) {
-                        player.play(songs)
+                    HStack(spacing: 16) {
+                        PlayCircleButton(diameter: 52) {
+                            player.play(songs)
+                        }
+                        DownloadProgressView()
                     }
                 }
 
@@ -76,5 +79,6 @@ struct DownloadsView: View {
         }
         .background(Color.spBackground)
         .onAppear { downloads.refresh() }
+        .task { await downloads.reconcileMissingMetadata() }
     }
 }

@@ -77,6 +77,9 @@ struct RootView: View {
             downloads.client = client
             if client == nil {
                 player.stopAndClear()
+            } else {
+                // Heal any cached files that are missing metadata.
+                Task { await downloads.reconcileMissingMetadata() }
             }
         }
     }
