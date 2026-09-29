@@ -67,7 +67,7 @@ struct StatsView: View {
                                         }
                                         Text("\(song.playCount ?? 0) plays")
                                             .font(.system(size: 12))
-                                            .foregroundColor(.spGreen)
+                                            .foregroundColor(.spAccent)
                                             .frame(width: 70, alignment: .trailing)
                                             .monospacedDigit()
                                     }
@@ -98,7 +98,7 @@ struct StatsView: View {
                                             Spacer()
                                             Text("\(entry.plays) plays")
                                                 .font(.system(size: 12))
-                                                .foregroundColor(.spGreen)
+                                                .foregroundColor(.spAccent)
                                                 .monospacedDigit()
                                         }
                                         .padding(.horizontal, 12)
@@ -151,7 +151,7 @@ struct StatsView: View {
         VStack(alignment: .leading, spacing: 4) {
             Text(value)
                 .font(.system(size: 24, weight: .heavy))
-                .foregroundColor(.spGreen)
+                .foregroundColor(.spAccent)
                 .lineLimit(1)
                 .minimumScaleFactor(0.6)
             Text(label)

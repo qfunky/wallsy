@@ -40,6 +40,7 @@ final class SubsonicClient {
     /// Session that always connects directly, bypassing any system proxy.
     private let directSession: URLSession
     private let decoder = JSONDecoder()
+    private let artworkSalt = SubsonicClient.randomSalt(length: 16)
 
     init(config: ServerConfig) {
         self.config = config
@@ -69,10 +70,14 @@ final class SubsonicClient {
 
     /// Variant that supports repeated query parameters (e.g. multiple `songId`).
     func url(for endpoint: String, items extraItems: [URLQueryItem]) -> URL {
+        makeURL(for: endpoint, items: extraItems, salt: nil)
+    }
+
+    private func makeURL(for endpoint: String, items extraItems: [URLQueryItem], salt fixedSalt: String?) -> URL {
         let base = config.baseURL.appendingPathComponent("rest").appendingPathComponent(endpoint)
         var components = URLComponents(url: base, resolvingAgainstBaseURL: false)!
 
-        let salt = Self.randomSalt(length: 16)
+        let salt = fixedSalt ?? Self.randomSalt(length: 16)
         let token = Insecure.MD5
             .hash(data: Data((config.password + salt).utf8))
             .map { String(format: "%02x", $0) }
@@ -95,8 +100,48 @@ final class SubsonicClient {
         url(for: "stream", params: ["id": id])
     }
 
+    /// Downloads the original server file to a URLSession temporary file and
+    /// hashes it without retaining a second copy in memory or the music cache.
+    func rawSongDigest(id: String) async throws -> (digest: String, size: Int64) {
+        let address = url(for: "stream", params: ["id": id, "format": "raw"])
+        var request = URLRequest(url: address)
+        request.cachePolicy = .reloadIgnoringLocalCacheData
+        request.timeoutInterval = 120
+
+        let downloaded: (URL, URLResponse)
+        do {
+            downloaded = try await session.download(for: request)
+        } catch let error as URLError {
+            switch error.code {
+            case .networkConnectionLost, .cannotConnectToHost, .cannotFindHost, .timedOut:
+                downloaded = try await directSession.download(for: request)
+            default:
+                throw error
+            }
+        }
+        let (file, response) = downloaded
+        defer { try? FileManager.default.removeItem(at: file) }
+        guard let http = response as? HTTPURLResponse else { throw SubsonicError.invalidResponse }
+        guard (200..<300).contains(http.statusCode) else { throw SubsonicError.http(http.statusCode) }
+        guard http.mimeType != "application/json" else { throw SubsonicError.invalidResponse }
+
+        let handle = try FileHandle(forReadingFrom: file)
+        defer { try? handle.close() }
+        var hash = SHA256()
+        var size: Int64 = 0
+        while let block = try handle.read(upToCount: 1024 * 1024), !block.isEmpty {
+            try Task.checkCancellation()
+            size += Int64(block.count)
+            hash.update(data: block)
+        }
+        return (hash.finalize().map { String(format: "%02x", $0) }.joined(), size)
+    }
+
     func coverArtURL(id: String, size: Int) -> URL {
-        url(for: "getCoverArt", params: ["id": id, "size": String(size)])
+        makeURL(for: "getCoverArt", items: [
+            URLQueryItem(name: "id", value: id),
+            URLQueryItem(name: "size", value: String(size))
+        ], salt: artworkSalt)
     }
 
     private static func randomSalt(length: Int) -> String {

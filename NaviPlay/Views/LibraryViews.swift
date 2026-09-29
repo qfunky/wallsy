@@ -150,7 +150,7 @@ struct TracksView: View {
 
                 Text(selection.isEmpty ? "No selection" : "\(selection.count) selected")
                     .font(.system(size: 12, weight: .semibold))
-                    .foregroundColor(selection.isEmpty ? .spSubtext : .spGreen)
+                    .foregroundColor(selection.isEmpty ? .spSubtext : .spAccent)
                     .frame(width: 90, alignment: .leading)
 
                 Button {

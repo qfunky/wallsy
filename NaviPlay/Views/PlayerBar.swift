@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct PlayerBar: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @EnvironmentObject private var app: AppState
     @EnvironmentObject private var player: PlayerController
     @EnvironmentObject private var router: Router
@@ -19,12 +20,10 @@ struct PlayerBar: View {
                 .frame(width: 240, alignment: .trailing)
         }
         .padding(.horizontal, 16)
-        .frame(height: 92)
+        .frame(height: 88)
         .background(Color.spCard)
         .overlay(alignment: .top) {
-            Rectangle()
-                .fill(Color.white.opacity(0.08))
-                .frame(height: 1)
+            Color.spBorder.frame(height: 1)
         }
     }
 
@@ -34,7 +33,7 @@ struct PlayerBar: View {
     private var nowPlayingSection: some View {
         if let song = player.currentSong {
             HStack(spacing: 12) {
-                ArtworkView(coverArt: song.coverArt, size: 56)
+                ArtworkView(coverArt: song.coverArt, size: 54, corner: 10)
                 VStack(alignment: .leading, spacing: 3) {
                     Text(song.title)
                         .font(.system(size: 13, weight: .semibold))
@@ -59,16 +58,16 @@ struct PlayerBar: View {
                 } label: {
                     Image(systemName: app.isStarred(song) ? "heart.fill" : "heart")
                         .font(.system(size: 14))
-                        .foregroundColor(app.isStarred(song) ? .spGreen : .spSubtext)
+                        .foregroundColor(app.isStarred(song) ? .spAccent : .spSubtext)
                 }
                 .buttonStyle(.plain)
                 .help("Add to Liked Songs")
             }
         } else {
             HStack(spacing: 12) {
-                RoundedRectangle(cornerRadius: 4)
+                RoundedRectangle(cornerRadius: 10)
                     .fill(Color.spCardHover)
-                    .frame(width: 56, height: 56)
+                    .frame(width: 54, height: 54)
                 Text("Not playing")
                     .font(.system(size: 12))
                     .foregroundColor(.spSubtext)
@@ -99,15 +98,17 @@ struct PlayerBar: View {
                 } label: {
                     ZStack {
                         Circle()
-                            .fill(Color.white)
-                            .frame(width: 34, height: 34)
+                            .fill(Color.spAccentFill)
+                            .frame(width: 38, height: 38)
+                            .shadow(color: Color.spAccentFill.opacity(0.2), radius: 8, y: 2)
                         Image(systemName: player.isPlaying ? "pause.fill" : "play.fill")
                             .font(.system(size: 13, weight: .bold))
-                            .foregroundColor(.black)
+                            .foregroundColor(.white)
                     }
                 }
                 .buttonStyle(.plain)
                 .help(player.isPlaying ? "Pause" : "Play")
+                .accessibilityLabel(player.isPlaying ? "Pause" : "Play")
 
                 controlButton(icon: "forward.end.fill", size: 14, help: "Next") {
                     player.next()
@@ -131,7 +132,8 @@ struct PlayerBar: View {
                     .frame(width: 40, alignment: .trailing)
 
                 SeekBar(
-                    value: player.duration > 0 ? player.currentTime / player.duration : 0
+                    value: player.duration > 0 ? player.currentTime / player.duration : 0,
+                    accessibilityName: "Playback position"
                 ) { fraction in
                     player.seek(to: fraction * player.duration)
                 }
@@ -152,16 +154,17 @@ struct PlayerBar: View {
     private var rightSection: some View {
         HStack(spacing: 12) {
             Button {
-                withAnimation(.easeInOut(duration: 0.2)) {
+                withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.2)) {
                     showQueue.toggle()
                 }
             } label: {
                 Image(systemName: "list.bullet")
                     .font(.system(size: 14))
-                    .foregroundColor(showQueue ? .spGreen : .spSubtext)
+                    .foregroundColor(showQueue ? .spAccent : .spSubtext)
             }
             .buttonStyle(.plain)
             .help("Queue")
+            .accessibilityLabel(showQueue ? "Hide queue" : "Show queue")
 
             Image(systemName: volumeIcon)
                 .font(.system(size: 13))
@@ -170,6 +173,7 @@ struct PlayerBar: View {
 
             SeekBar(
                 value: player.volume,
+                accessibilityName: "Volume",
                 onChanging: { player.volume = $0 },
                 onSeek: { player.volume = $0 }
             )
@@ -194,9 +198,10 @@ struct PlayerBar: View {
         Button(action: action) {
             Image(systemName: icon)
                 .font(.system(size: size, weight: .semibold))
-                .foregroundColor(active ? .spGreen : .spSubtext)
+                .foregroundColor(active ? .spAccent : .spSubtext)
         }
         .buttonStyle(.plain)
         .help(help)
+        .accessibilityLabel(help)
     }
 }

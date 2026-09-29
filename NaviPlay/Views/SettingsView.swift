@@ -2,31 +2,79 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 struct SettingsView: View {
+    private enum Pane {
+        case general
+        case duplicates
+    }
+
     @EnvironmentObject private var downloads: DownloadManager
     @EnvironmentObject private var player: PlayerController
     @Environment(\.dismiss) private var dismiss
 
+    @State private var selectedPane: Pane = .general
     @State private var showDirPicker = false
     @State private var showClearConfirm = false
     @AppStorage("uiScale") private var uiScale = 1.0
+    @AppStorage("compactLists") private var compactLists = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 22) {
+        VStack(spacing: 0) {
             HStack {
                 Text("Settings")
                     .font(.system(size: 22, weight: .bold))
                     .foregroundColor(.white)
                 Spacer()
-                Button {
-                    dismiss()
-                } label: {
+                Button { dismiss() } label: {
                     Image(systemName: "xmark.circle.fill")
                         .font(.system(size: 18))
                         .foregroundColor(.spSubtext)
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel("Close settings")
             }
+            .padding(.horizontal, 24)
+            .padding(.top, 22)
+            .padding(.bottom, 16)
 
+            HStack(spacing: 8) {
+                paneButton(.general, title: "General", icon: "slider.horizontal.3")
+                paneButton(.duplicates, title: "Duplicates", icon: "square.on.square")
+                Spacer()
+            }
+            .padding(.horizontal, 24)
+            .padding(.bottom, 14)
+
+            Rectangle()
+                .fill(Color.white.opacity(0.1))
+                .frame(height: 1)
+
+            if selectedPane == .general {
+                generalSettings
+            } else {
+                DuplicateCleanerView()
+            }
+        }
+        .frame(width: 640, height: 640)
+        .background(Color.spBackground)
+    }
+
+    private func paneButton(_ pane: Pane, title: String, icon: String) -> some View {
+        Button { selectedPane = pane } label: {
+            Label(title, systemImage: icon)
+                .font(.system(size: 12, weight: selectedPane == pane ? .semibold : .medium))
+                .foregroundColor(selectedPane == pane ? .white : .spSubtext)
+                .padding(.horizontal, 13)
+                .padding(.vertical, 8)
+                .background {
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(selectedPane == pane ? Color.spCard : Color.clear)
+                }
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var generalSettings: some View {
+        VStack(alignment: .leading, spacing: 22) {
             // MARK: Playback
 
             VStack(alignment: .leading, spacing: 10) {
@@ -47,6 +95,11 @@ struct SettingsView: View {
                     .font(.system(size: 11))
                     .foregroundColor(.spSubtext)
             }
+
+            Divider().background(Color.white.opacity(0.1))
+
+            Toggle("Compact track lists", isOn: $compactLists)
+                .font(.system(size: 13))
 
             Divider().background(Color.white.opacity(0.1))
 
@@ -123,8 +176,8 @@ struct SettingsView: View {
             Spacer()
         }
         .padding(24)
-        .frame(width: 460, height: 600)
-        .background(Color.spCard)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color.spBackground)
         .fileImporter(isPresented: $showDirPicker, allowedContentTypes: [.folder]) { result in
             if case .success(let url) = result {
                 downloads.setCacheDirectory(url)

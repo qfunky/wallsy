@@ -24,12 +24,17 @@ final class DownloadManager: ObservableObject {
     @Published private(set) var currentProgress: Double = 0
     @Published private(set) var batchTotal = 0
     @Published private(set) var batchDone = 0
+    @Published private(set) var isPaused = false
 
-    var client: SubsonicClient?
+    var client: SubsonicClient? {
+        didSet { if client != nil { startProcessingIfNeeded() } }
+    }
 
     private static let dirKey = "cacheDirectoryPath"
     private var downloadQueue: [Song] = []
     private var working = false
+    private var processingTask: Task<Void, Never>?
+    private var inFlightSong: Song?
 
     init() {
         refresh()
@@ -64,6 +69,17 @@ final class DownloadManager: ObservableObject {
         cacheDirectory.appendingPathComponent("wallsy_index.json")
     }
 
+    private var pendingQueueURL: URL {
+        cacheDirectory.appendingPathComponent("wallsy_pending_downloads.json")
+    }
+
+    private func persistQueue() {
+        let pending = (inFlightSong.map { [$0] } ?? []) + downloadQueue
+        if let data = try? JSONEncoder().encode(pending) {
+            try? data.write(to: pendingQueueURL, options: .atomic)
+        }
+    }
+
     func setCacheDirectory(_ url: URL) {
         UserDefaults.standard.set(url.path, forKey: Self.dirKey)
         refresh()
@@ -85,6 +101,14 @@ final class DownloadManager: ObservableObject {
             index[id] = song
         }
         cachedIndex = index
+        if !working, downloadQueue.isEmpty,
+           let data = try? Data(contentsOf: pendingQueueURL),
+           let pending = try? JSONDecoder().decode([Song].self, from: data) {
+            downloadQueue = pending
+            queuedIds = Set(pending.map(\.id))
+            activeCount = pending.count
+            batchTotal = pending.count
+        }
 
         // Scan audio files.
         var files: [String: URL] = [:]
@@ -94,7 +118,7 @@ final class DownloadManager: ObservableObject {
             includingPropertiesForKeys: [.fileSizeKey],
             options: [.skipsHiddenFiles]
         )) ?? []
-        for file in contents where file.lastPathComponent != "wallsy_index.json" && file.pathExtension != "part" {
+        for file in contents where !["wallsy_index.json", "wallsy_pending_downloads.json"].contains(file.lastPathComponent) && file.pathExtension != "part" {
             let id = file.deletingPathExtension().lastPathComponent
             files[id] = file
             total += Int64((try? file.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0)
@@ -140,6 +164,10 @@ final class DownloadManager: ObservableObject {
             try? FileManager.default.removeItem(at: url)
         }
         try? FileManager.default.removeItem(at: indexURL)
+        try? FileManager.default.removeItem(at: pendingQueueURL)
+        downloadQueue = []
+        inFlightSong = nil
+        queuedIds = []
         refresh()
     }
 
@@ -182,42 +210,79 @@ final class DownloadManager: ObservableObject {
             queuedIds.insert(song.id)
         }
         activeCount = downloadQueue.count
+        persistQueue()
         if working {
             batchTotal += new.count
         } else {
-            batchTotal = new.count
+            batchTotal = downloadQueue.count
             batchDone = 0
-            working = true
-            Task { await processQueue() }
+            startProcessingIfNeeded()
         }
+    }
+
+    func pauseDownloads() {
+        guard working else { return }
+        isPaused = true
+        processingTask?.cancel()
+    }
+
+    func resumeDownloads() {
+        isPaused = false
+        lastError = nil
+        startProcessingIfNeeded()
+    }
+
+    private func startProcessingIfNeeded() {
+        guard client != nil, !working, !isPaused, !downloadQueue.isEmpty else { return }
+        working = true
+        processingTask = Task { await processQueue() }
     }
 
     private func processQueue() async {
         defer {
             working = false
-            activeCount = 0
+            processingTask = nil
+            activeCount = downloadQueue.count
             currentId = nil
             currentProgress = 0
-            queuedIds = []
-            batchTotal = 0
-            batchDone = 0
+            if downloadQueue.isEmpty {
+                queuedIds = []
+                batchTotal = 0
+                batchDone = 0
+            }
+            persistQueue()
             persistIndex()
             refresh()
+            if !isPaused && !downloadQueue.isEmpty {
+                Task { self.startProcessingIfNeeded() }
+            }
         }
-        while !downloadQueue.isEmpty {
+        while !downloadQueue.isEmpty && !isPaused && !Task.isCancelled {
             let song = downloadQueue.removeFirst()
+            inFlightSong = song
             queuedIds.remove(song.id)
+            persistQueue()
             activeCount = downloadQueue.count + 1
             currentId = song.id
             currentProgress = 0
-            await downloadOne(song)
+            let succeeded = await downloadOne(song)
+            if isPaused || Task.isCancelled || !succeeded {
+                downloadQueue.insert(song, at: 0)
+                queuedIds.insert(song.id)
+                inFlightSong = nil
+                if !succeeded && !Task.isCancelled { isPaused = true }
+                break
+            }
             batchDone += 1
             currentId = nil
+            inFlightSong = nil
+            persistQueue()
         }
     }
 
-    private func downloadOne(_ song: Song) async {
-        guard let client, !isCached(song) else { return }
+    private func downloadOne(_ song: Song) async -> Bool {
+        guard let client else { return false }
+        if isCached(song) { return true }
         // format=raw asks Navidrome for the original file (no transcoding).
         let url = client.url(for: "stream", params: ["id": song.id, "format": "raw"])
 
@@ -227,22 +292,31 @@ final class DownloadManager: ObservableObject {
         let dest = cacheDirectory.appendingPathComponent("\(safeId).\(ext.isEmpty ? "mp3" : ext)")
         let partial = cacheDirectory.appendingPathComponent("\(safeId).part")
 
-        do {
-            try await Self.fetchFile(from: url, to: partial) { progress in
-                Task { @MainActor [weak self] in
-                    guard let self, self.currentId == song.id else { return }
-                    self.currentProgress = progress
+        for attempt in 0..<3 {
+            do {
+                try await Self.fetchFile(from: url, to: partial) { [weak self] progress in
+                    Task { @MainActor [weak self] in
+                        guard let self, self.currentId == song.id else { return }
+                        self.currentProgress = progress
+                    }
+                }
+                try? FileManager.default.removeItem(at: dest)
+                try FileManager.default.moveItem(at: partial, to: dest)
+                cachedFiles[safeId] = dest
+                cachedIndex[song.id] = song
+                persistIndex()
+                lastError = nil
+                return true
+            } catch {
+                if Task.isCancelled || isPaused { return false }
+                if attempt < 2 {
+                    try? await Task.sleep(nanoseconds: UInt64(attempt + 1) * 1_000_000_000)
+                } else {
+                    lastError = "Failed to download \u{201C}\(song.title)\u{201D}: \(error.localizedDescription). Select it again to resume."
                 }
             }
-            try? FileManager.default.removeItem(at: dest)
-            try FileManager.default.moveItem(at: partial, to: dest)
-            cachedFiles[safeId] = dest
-            cachedIndex[song.id] = song
-            persistIndex() // persist after every track, not only at batch end
-        } catch {
-            try? FileManager.default.removeItem(at: partial)
-            lastError = "Failed to download \u{201C}\(song.title)\u{201D}: \(error.localizedDescription)"
         }
+        return false
     }
 
     /// Streams a URL to disk off the main actor, reporting progress in ~2% steps.
@@ -251,15 +325,26 @@ final class DownloadManager: ObservableObject {
         to destination: URL,
         onProgress: @escaping @Sendable (Double) -> Void
     ) async throws {
-        let (bytes, response) = try await URLSession.shared.bytes(from: url)
+        let existing = (try? destination.resourceValues(forKeys: [.fileSizeKey]).fileSize).map(Int64.init) ?? 0
+        var request = URLRequest(url: url)
+        if existing > 0 { request.setValue("bytes=\(existing)-", forHTTPHeaderField: "Range") }
+        let (bytes, response) = try await URLSession.shared.bytes(for: request)
         guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
             throw URLError(.badServerResponse)
         }
-        let expected = response.expectedContentLength // -1 if unknown
+        let rangeMatches = http.statusCode == 206
+            && http.value(forHTTPHeaderField: "Content-Range")?.hasPrefix("bytes \(existing)-") == true
+        let offset = rangeMatches ? existing : 0
+        let expected = response.expectedContentLength > 0
+            ? offset + response.expectedContentLength : -1
 
-        FileManager.default.createFile(atPath: destination.path, contents: nil)
+        if offset == 0 {
+            FileManager.default.createFile(atPath: destination.path, contents: nil)
+        }
         let handle = try FileHandle(forWritingTo: destination)
         defer { try? handle.close() }
+        if offset > 0 { try handle.seekToEnd() }
+        else { try handle.truncate(atOffset: 0) }
 
         let chunkSize = 512 * 1024
         var buffer = Data()
@@ -274,7 +359,7 @@ final class DownloadManager: ObservableObject {
                 written += Int64(buffer.count)
                 buffer.removeAll(keepingCapacity: true)
                 if expected > 0 {
-                    let progress = Double(written) / Double(expected)
+                    let progress = Double(offset + written) / Double(expected)
                     if progress - lastReported >= 0.02 {
                         lastReported = progress
                         onProgress(min(progress, 1))

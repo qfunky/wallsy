@@ -18,9 +18,12 @@ Requires: requests (pip install requests). For downloading also yt-dlp etc. —
 run inside SpotFetch's virtualenv or `pip install -r SpotFetch/requirements.txt`.
 """
 
+from __future__ import annotations
+
 import argparse
 import csv
 import hashlib
+import json
 import os
 import re
 import secrets
@@ -43,6 +46,7 @@ class Subsonic:
         self.user = user
         self.password = password
         self.session = requests.Session()
+        self._search_cache = {}
         if proxy:
             self.session.proxies = {"http": proxy, "https": proxy}
         else:
@@ -83,20 +87,38 @@ class Subsonic:
         return body
 
     def search_songs(self, query: str, count: int = 12) -> list:
+        key = (query, count)
+        if key in self._search_cache:
+            return self._search_cache[key]
         body = self.call("search3", {"query": query, "songCount": count,
                                      "albumCount": 0, "artistCount": 0})
-        return body.get("searchResult3", {}).get("song", []) or []
+        songs = body.get("searchResult3", {}).get("song", []) or []
+        self._search_cache[key] = songs
+        return songs
 
     def playlists(self) -> list:
         return self.call("getPlaylists").get("playlists", {}).get("playlist", []) or []
 
     def create_or_replace_playlist(self, name: str, song_ids: list):
         existing = next((p for p in self.playlists() if p["name"] == name), None)
-        repeated = [("songId", sid) for sid in song_ids]
+        # Keep requests short enough for servers and reverse proxies that limit
+        # URL length. createPlaylist replaces the existing contents in Navidrome.
+        repeated = [("songId", sid) for sid in song_ids[:75]]
         if existing:
             self.call("createPlaylist", {"playlistId": existing["id"]}, repeated)
+            playlist_id = existing["id"]
         else:
-            self.call("createPlaylist", {"name": name}, repeated)
+            response = self.call("createPlaylist", {"name": name}, repeated)
+            playlist_id = response.get("playlist", {}).get("id")
+            if not playlist_id:
+                playlist_id = next(p["id"] for p in self.playlists() if p["name"] == name)
+        for offset in range(75, len(song_ids), 75):
+            self.call("updatePlaylist", {"playlistId": playlist_id},
+                      [("songIdToAdd", sid) for sid in song_ids[offset:offset + 75]])
+
+    def star_songs(self, song_ids: list):
+        for offset in range(0, len(song_ids), 75):
+            self.call("star", repeated=[("id", sid) for sid in song_ids[offset:offset + 75]])
 
     def start_scan(self):
         self.call("startScan")
@@ -106,6 +128,7 @@ class Subsonic:
         while time.time() - start < timeout:
             status = self.call("getScanStatus").get("scanStatus", {})
             if not status.get("scanning", False):
+                self._search_cache.clear()
                 return
             time.sleep(3)
         print("[!] Scan timed out; continuing anyway.")
@@ -131,6 +154,7 @@ def best_match(track: dict, candidates: list) -> str | None:
     """Returns the matched song id or None."""
     want_title = normalize(track["title"])
     want_artist = normalize(track["artist"])
+    want_album = normalize(track.get("album", ""))
     want_ms = track.get("duration_ms")
 
     best, best_score = None, 0.0
@@ -138,14 +162,22 @@ def best_match(track: dict, candidates: list) -> str | None:
         got_title = normalize(c.get("title", ""))
         got_artist = normalize(c.get("artist", ""))
         score = 0.0
+        title_score = 0.0
+        artist_score = 0.0
         if got_title == want_title:
-            score += 2
+            title_score = 2
         elif want_title and (want_title in got_title or got_title in want_title):
-            score += 1.2
+            title_score = 1.2
         if got_artist == want_artist:
-            score += 2
+            artist_score = 2
         elif want_artist and (want_artist in got_artist or got_artist in want_artist):
-            score += 1.2
+            artist_score = 1.2
+        # Duration alone must never turn a different artist into a match.
+        if not title_score or not artist_score:
+            continue
+        score += title_score + artist_score
+        if want_album and normalize(c.get("album", "")) == want_album:
+            score += 0.4
         if want_ms and c.get("duration"):
             if abs(c["duration"] - want_ms / 1000) <= 15:
                 score += 0.5
@@ -184,6 +216,23 @@ def read_exportify_csv(path: Path) -> list:
     return tracks
 
 
+def emit(event: str, **details):
+    """Machine-readable progress for the macOS app; ordinary logs stay readable."""
+    print("WALLSY_EVENT " + json.dumps({"event": event, **details}), flush=True)
+
+
+def report_path(csv_path: Path, report_dir: Path) -> Path:
+    key = hashlib.sha256(str(csv_path.resolve()).encode()).hexdigest()[:20]
+    return report_dir / f"{key}.json"
+
+
+def save_report(path: Path, report: dict):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_suffix(".tmp")
+    temporary.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+    temporary.replace(path)
+
+
 # ---------------------------------------------------------------- main
 
 def main():
@@ -200,42 +249,89 @@ def main():
     ap.add_argument("--cookies", default=None)
     ap.add_argument("--no-download", action="store_true", help="Only match, never download")
     ap.add_argument("--proxy", default=None, help="HTTP proxy for the server, e.g. http://127.0.0.1:1056")
+    ap.add_argument("--report-dir", type=Path,
+                    default=Path.home() / "Library/Application Support/Wallsy/Imports")
+    ap.add_argument("--retry-missing", action="store_true",
+                    help="Retry only unmatched tracks from an earlier import")
+    ap.add_argument("--star-liked", action="store_true",
+                    help="Star matched tracks from Liked Songs or Saved Tracks CSVs")
     args = ap.parse_args()
 
     if not args.password:
         sys.exit("[!] No password: pass --password or set WALLSY_PASSWORD.")
-    api = Subsonic(args.server, args.user, args.password, args.proxy)
+
+    csv_paths = [Path(value) for value in args.csvs]
+    for path in csv_paths:
+        if not path.is_file():
+            sys.exit(f"[!] CSV file not found: {path}")
+        with path.open(encoding="utf-8-sig", newline="") as source:
+            header = set(next(csv.reader(source), []))
+        if not {"Track Name", "Artist Name(s)"}.issubset(header):
+            sys.exit(f"[!] {path.name} is not an Exportify playlist CSV (missing Track Name / Artist Name(s)).")
 
     downloader = None
     if not args.no_download:
         if not args.music_dir:
             sys.exit("[!] --music-dir is required for downloading (or pass --no-download).")
+        if not os.path.isdir(args.music_dir) or not os.access(args.music_dir, os.W_OK):
+            sys.exit(f"[!] Music folder is missing or not writable: {args.music_dir}")
+        if not (Path(args.spotfetch) / "functions.py").is_file():
+            sys.exit(f"[!] SpotFetch functions.py not found in {args.spotfetch}")
         sys.path.insert(0, args.spotfetch)
         try:
             from functions import download_from_query  # SpotFetch
             downloader = download_from_query
         except ImportError as e:
-            sys.exit(f"[!] Cannot import SpotFetch from {args.spotfetch}: {e}")
+            sys.exit(f"[!] Cannot import SpotFetch: {e}. Select its .venv/bin/python3 in Wallsy.")
 
-    for csv_path in args.csvs:
-        path = Path(csv_path)
+    api = Subsonic(args.server, args.user, args.password, args.proxy)
+
+    total_missing = 0
+    for path in csv_paths:
         playlist_name = path.stem.replace("_", " ").strip()
         tracks = read_exportify_csv(path)
+        if not tracks:
+            sys.exit(f"[!] {path.name} contains no usable tracks; no playlist was changed.")
         print(f"\n=== {playlist_name}: {len(tracks)} tracks in CSV")
+        digest = hashlib.sha256(path.read_bytes()).hexdigest()
+        state_file = report_path(path, args.report_dir)
+        previous = {}
+        if args.retry_missing and state_file.exists():
+            try:
+                previous = json.loads(state_file.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                pass
+        if (previous.get("digest") == digest and previous.get("server") == args.server
+                and previous.get("user") == args.user):
+            matched = dict(previous.get("matched", {}))
+        else:
+            matched = {}
+        report = {"csv": str(path.resolve()), "name": playlist_name,
+                  "server": args.server, "user": args.user,
+                  "digest": digest, "matched": matched}
+        emit("playlist", name=playlist_name, total=len(tracks), completed=len(matched))
 
-        found_ids, missing = [], []
-        for t in tracks:
-            sid = find_song(api, t)
+        missing = []
+        processed = len(matched)
+        for index, track in enumerate(tracks):
+            if str(index) in matched:
+                continue
+            sid = find_song(api, track)
             if sid:
-                found_ids.append(sid)
+                matched[str(index)] = sid
             else:
-                missing.append(t)
-        print(f"    matched {len(found_ids)}, missing {len(missing)}")
+                missing.append(index)
+            processed += 1
+            save_report(state_file, report)
+            emit("progress", name=playlist_name, completed=processed,
+                 total=len(tracks), title=track["title"])
+        print(f"    matched {len(matched)}, missing {len(missing)}")
 
         if missing and downloader:
             out_dir = os.path.join(args.music_dir, "Wallsy Imports", playlist_name)
             os.makedirs(out_dir, exist_ok=True)
-            for t in missing:
+            for index in missing:
+                t = tracks[index]
                 print(f"    ↓ downloading: {t['artist']} — {t['title']}")
                 try:
                     downloader(
@@ -251,20 +347,33 @@ def main():
             api.wait_for_scan()
 
             still_missing = []
-            for t in missing:
-                sid = find_song(api, t)
+            for index in missing:
+                sid = find_song(api, tracks[index])
                 if sid:
-                    found_ids.append(sid)
+                    matched[str(index)] = sid
                 else:
-                    still_missing.append(t)
+                    still_missing.append(index)
+                save_report(state_file, report)
             missing = still_missing
 
-        api.create_or_replace_playlist(playlist_name, found_ids)
-        print(f"    ✔ playlist “{playlist_name}” updated: {len(found_ids)} tracks")
+        found_ids = [matched[str(index)] for index in range(len(tracks)) if str(index) in matched]
+        if found_ids:
+            api.create_or_replace_playlist(playlist_name, found_ids)
+            if args.star_liked and normalize(playlist_name) in {"liked songs", "saved tracks", "your liked songs"}:
+                api.star_songs(list(dict.fromkeys(found_ids)))
+                print(f"    ♥ starred {len(set(found_ids))} matched tracks")
+            print(f"    ✔ playlist “{playlist_name}” updated: {len(found_ids)} tracks")
+        else:
+            print(f"    [!] No tracks matched; playlist “{playlist_name}” was not changed.")
+        total_missing += len(missing)
+        emit("complete", name=playlist_name, matched=len(found_ids), missing=len(missing))
         if missing:
             print("    Tracks not found (check/download manually):")
-            for t in missing:
+            for index in missing:
+                t = tracks[index]
                 print(f"      • {t['artist']} — {t['title']}")
+
+    emit("finished", missing=total_missing)
 
 
 if __name__ == "__main__":

@@ -17,6 +17,8 @@ struct Song: Codable, Identifiable, Hashable {
     let duration: Int?
     let bitRate: Int?
     let suffix: String?
+    let size: Int64?
+    let path: String?
     let starred: String?
     let playCount: Int?
     let played: String?

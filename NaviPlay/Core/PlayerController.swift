@@ -3,7 +3,7 @@ import AVFoundation
 import MediaPlayer
 import AppKit
 
-enum RepeatMode {
+enum RepeatMode: String, Codable {
     case off, all, one
 
     var next: RepeatMode {
@@ -26,6 +26,7 @@ final class PlayerController: ObservableObject {
     @Published private(set) var repeatMode: RepeatMode = .off
     @Published var volume: Double = 0.8 {
         didSet {
+            UserDefaults.standard.set(volume, forKey: "playerVolume")
             if !crossfading {
                 activePlayer.volume = Float(volume)
             }
@@ -58,10 +59,26 @@ final class PlayerController: ObservableObject {
     private var crossfading = false
     private var fadeOutIdx: Int?
     private var fadeTimer: Timer?
+    private let sessionKey = "savedPlaybackSession"
+    private let positionKey = "savedPlaybackPosition"
+    private var lastSavedSecond = -1
+    private var restoringPosition: Double?
+
+    private struct PlaybackSession: Codable {
+        let server: String
+        let username: String
+        let queue: [Song]
+        let originalQueue: [Song]
+        let currentIndex: Int
+        let position: Double
+        let shuffle: Bool
+        let repeatMode: RepeatMode
+    }
 
     init() {
         let stored = UserDefaults.standard.object(forKey: "crossfadeDuration") as? Double
         crossfadeDuration = stored ?? 4
+        volume = UserDefaults.standard.object(forKey: "playerVolume") as? Double ?? 0.8
         for p in players {
             p.volume = Float(volume)
         }
@@ -90,6 +107,45 @@ final class PlayerController: ObservableObject {
 
     // MARK: - Public API
 
+    /// Restore the last queue for this account, paused at its saved position.
+    func restoreSessionIfAvailable() {
+        guard queue.isEmpty, let client,
+              let data = UserDefaults.standard.data(forKey: sessionKey),
+              let session = try? JSONDecoder().decode(PlaybackSession.self, from: data),
+              session.server == client.config.baseURL.absoluteString,
+              session.username == client.config.username,
+              session.queue.indices.contains(session.currentIndex) else { return }
+        queue = session.queue
+        originalQueue = session.originalQueue
+        currentIndex = session.currentIndex
+        shuffleEnabled = session.shuffle
+        repeatMode = session.repeatMode
+        let position = UserDefaults.standard.object(forKey: positionKey) as? Double ?? session.position
+        startPlayback(autoplay: false, at: position)
+    }
+
+    private func persistSession() {
+        guard let client, let index = currentIndex, queue.indices.contains(index) else { return }
+        let session = PlaybackSession(
+            server: client.config.baseURL.absoluteString,
+            username: client.config.username,
+            queue: queue,
+            originalQueue: originalQueue,
+            currentIndex: index,
+            position: currentTime,
+            shuffle: shuffleEnabled,
+            repeatMode: repeatMode
+        )
+        if let data = try? JSONEncoder().encode(session) {
+            UserDefaults.standard.set(data, forKey: sessionKey)
+        }
+        persistPosition()
+    }
+
+    private func persistPosition() {
+        UserDefaults.standard.set(currentTime, forKey: positionKey)
+    }
+
     func play(_ songs: [Song], startAt index: Int = 0) {
         guard !songs.isEmpty, songs.indices.contains(index) else { return }
         originalQueue = songs
@@ -111,6 +167,7 @@ final class PlayerController: ObservableObject {
         } else {
             let insertAt = (currentIndex ?? -1) + 1
             queue.insert(song, at: min(insertAt, queue.count))
+            persistSession()
         }
     }
 
@@ -119,6 +176,7 @@ final class PlayerController: ObservableObject {
             play([song])
         } else {
             queue.append(song)
+            persistSession()
         }
     }
 
@@ -137,6 +195,7 @@ final class PlayerController: ObservableObject {
         }
         isPlaying.toggle()
         updateNowPlayingPlaybackState()
+        persistSession()
     }
 
     /// Manual "next": always wraps around the queue.
@@ -161,6 +220,7 @@ final class PlayerController: ObservableObject {
 
     func seek(to seconds: Double) {
         cancelCrossfade()
+        restoringPosition = nil
         let clamped = max(0, min(seconds, duration > 0 ? duration : seconds))
         activePlayer.seek(
             to: CMTime(seconds: clamped, preferredTimescale: 600),
@@ -169,6 +229,7 @@ final class PlayerController: ObservableObject {
         )
         currentTime = clamped
         updateNowPlayingPlaybackState()
+        persistSession()
     }
 
     func toggleShuffle() {
@@ -185,16 +246,19 @@ final class PlayerController: ObservableObject {
             }
             currentIndex = queue.firstIndex { $0.id == current.id } ?? 0
         }
+        persistSession()
     }
 
     func cycleRepeatMode() {
         repeatMode = repeatMode.next
+        persistSession()
     }
 
     func clearUpcoming() {
         guard let index = currentIndex else { return }
         queue = Array(queue.prefix(index + 1))
         originalQueue = queue
+        persistSession()
     }
 
     func stopAndClear() {
@@ -210,6 +274,8 @@ final class PlayerController: ObservableObject {
         isPlaying = false
         currentTime = 0
         duration = 0
+        UserDefaults.standard.removeObject(forKey: sessionKey)
+        UserDefaults.standard.removeObject(forKey: positionKey)
         MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
     }
 
@@ -222,7 +288,7 @@ final class PlayerController: ObservableObject {
         return client?.streamURL(id: song.id)
     }
 
-    private func startPlayback() {
+    private func startPlayback(autoplay: Bool = true, at position: Double = 0) {
         cancelCrossfade()
         guard let song = currentSong, let url = playbackURL(for: song) else { return }
 
@@ -232,13 +298,19 @@ final class PlayerController: ObservableObject {
 
         activePlayer.replaceCurrentItem(with: item)
         activePlayer.volume = Float(volume)
-        activePlayer.play()
-        isPlaying = true
-        currentTime = 0
+        restoringPosition = position > 0 ? position : nil
+        if position > 0 {
+            activePlayer.seek(to: CMTime(seconds: position, preferredTimescale: 600),
+                              toleranceBefore: .zero, toleranceAfter: .zero)
+        }
+        if autoplay { activePlayer.play() }
+        isPlaying = autoplay
+        currentTime = position
         duration = Double(song.duration ?? 0)
         scrobbleSubmitted = false
-        client?.scrobble(id: song.id, submission: false)
+        if autoplay { client?.scrobble(id: song.id, submission: false) }
         updateNowPlayingInfo()
+        persistSession()
     }
 
     private func addEndObserver(for item: AVPlayerItem) {
@@ -287,7 +359,16 @@ final class PlayerController: ObservableObject {
 
     private func tick(_ time: CMTime) {
         guard time.isNumeric else { return }
+        if let target = restoringPosition {
+            guard abs(time.seconds - target) < 2 else { return }
+            restoringPosition = nil
+        }
         currentTime = time.seconds
+        let second = Int(currentTime)
+        if second / 5 != lastSavedSecond / 5 {
+            lastSavedSecond = second
+            persistPosition()
+        }
 
         if duration <= 0,
            let itemDuration = activePlayer.currentItem?.duration,

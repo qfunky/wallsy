@@ -5,11 +5,13 @@ import UniformTypeIdentifiers
 // MARK: - Theme
 
 extension Color {
-    static let spBackground = Color(red: 18 / 255, green: 18 / 255, blue: 18 / 255)
-    static let spCard = Color(red: 24 / 255, green: 24 / 255, blue: 24 / 255)
-    static let spCardHover = Color(red: 40 / 255, green: 40 / 255, blue: 40 / 255)
-    static let spGreen = Color(red: 30 / 255, green: 215 / 255, blue: 96 / 255)
-    static let spSubtext = Color(white: 0.65)
+    static let spBackground = Color(red: 10 / 255, green: 13 / 255, blue: 12 / 255)
+    static let spCard = Color(red: 19 / 255, green: 24 / 255, blue: 22 / 255)
+    static let spCardHover = Color(red: 29 / 255, green: 37 / 255, blue: 33 / 255)
+    static let spAccent = Color(red: 128 / 255, green: 177 / 255, blue: 151 / 255)
+    static let spAccentFill = Color(red: 34 / 255, green: 83 / 255, blue: 62 / 255)
+    static let spSubtext = Color(red: 164 / 255, green: 174 / 255, blue: 167 / 255)
+    static let spBorder = Color.white.opacity(0.08)
 }
 
 // MARK: - Formatting helpers
@@ -105,12 +107,12 @@ struct PlayCircleButton: View {
         Button(action: action) {
             ZStack {
                 Circle()
-                    .fill(Color.spGreen)
+                    .fill(Color.spAccentFill)
                     .frame(width: diameter, height: diameter)
                     .shadow(color: .black.opacity(0.5), radius: 6, y: 3)
                 Image(systemName: "play.fill")
                     .font(.system(size: diameter * 0.4, weight: .bold))
-                    .foregroundColor(.black)
+                    .foregroundColor(.white)
             }
         }
         .buttonStyle(.plain)
@@ -135,7 +137,7 @@ struct AlbumCard: View {
         } label: {
             VStack(alignment: .leading, spacing: 8) {
                 ZStack(alignment: .bottomTrailing) {
-                    ArtworkView(coverArt: album.coverArt, size: artSize, corner: 6)
+                    ArtworkView(coverArt: album.coverArt, size: artSize, corner: 10)
                     if hovering {
                         PlayCircleButton { playAlbum() }
                             .padding(8)
@@ -154,9 +156,13 @@ struct AlbumCard: View {
             .padding(12)
             .frame(width: artSize + 24, alignment: .leading)
             .background(
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
                     .fill(hovering ? Color.spCardHover : Color.spCard)
             )
+            .overlay {
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .strokeBorder(Color.spBorder, lineWidth: 1)
+            }
         }
         .buttonStyle(.plain)
         .onHover { inside in
@@ -186,6 +192,7 @@ struct AlbumCard: View {
 // MARK: - Track row
 
 struct TrackRow: View {
+    @AppStorage("compactLists") private var compactLists = false
     @EnvironmentObject private var app: AppState
     @EnvironmentObject private var player: PlayerController
     @EnvironmentObject private var router: Router
@@ -214,7 +221,7 @@ struct TrackRow: View {
         case .cached:
             Image(systemName: "arrow.down.circle.fill")
                 .font(.system(size: 11))
-                .foregroundColor(.spGreen)
+                .foregroundColor(.spAccent)
                 .help("Available offline")
         case .downloading(let progress):
             DownloadProgressCircle(progress: progress)
@@ -242,7 +249,7 @@ struct TrackRow: View {
                 } else if isCurrent {
                     Image(systemName: player.isPlaying ? "speaker.wave.2.fill" : "speaker.fill")
                         .font(.system(size: 11))
-                        .foregroundColor(.spGreen)
+                        .foregroundColor(.spAccent)
                 } else {
                     Text(String(index + 1))
                         .font(.system(size: 13))
@@ -253,13 +260,13 @@ struct TrackRow: View {
             .frame(width: 26, alignment: .center)
 
             if showsArtwork {
-                ArtworkView(coverArt: song.coverArt, size: 40)
+                ArtworkView(coverArt: song.coverArt, size: compactLists ? 30 : 40)
             }
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(song.title)
                     .font(.system(size: 14))
-                    .foregroundColor(isCurrent ? .spGreen : .white)
+                    .foregroundColor(isCurrent ? .spAccent : .white)
                     .lineLimit(1)
                 if let artist = song.artist {
                     Text(artist)
@@ -284,7 +291,7 @@ struct TrackRow: View {
             } label: {
                 Image(systemName: app.isStarred(song) ? "heart.fill" : "heart")
                     .font(.system(size: 12))
-                    .foregroundColor(app.isStarred(song) ? .spGreen : .spSubtext)
+                    .foregroundColor(app.isStarred(song) ? .spAccent : .spSubtext)
             }
             .buttonStyle(.plain)
             .opacity(hovering || app.isStarred(song) ? 1 : 0)
@@ -299,9 +306,9 @@ struct TrackRow: View {
                 .frame(width: 44, alignment: .trailing)
         }
         .padding(.horizontal, 12)
-        .padding(.vertical, 6)
+        .padding(.vertical, compactLists ? 3 : 6)
         .background(
-            RoundedRectangle(cornerRadius: 5, style: .continuous)
+            RoundedRectangle(cornerRadius: 9, style: .continuous)
                 .fill(
                     isSelected
                         ? Color.white.opacity(0.18)
@@ -390,7 +397,7 @@ struct ReorderableRow<Content: View>: View {
         .overlay(alignment: .top) {
             if isTargeted {
                 Rectangle()
-                    .fill(Color.spGreen)
+                    .fill(Color.spAccent)
                     .frame(height: 2)
             }
         }
@@ -417,6 +424,7 @@ struct SeekBar: View {
     /// Current progress, 0...1.
     var value: Double
     var activeColor: Color = .white
+    var accessibilityName: String = "Progress"
     /// Called continuously while dragging (used by the volume slider).
     var onChanging: ((Double) -> Void)? = nil
     var onSeek: (Double) -> Void
@@ -434,7 +442,7 @@ struct SeekBar: View {
                     .fill(Color.white.opacity(0.25))
                     .frame(height: 4)
                 Capsule()
-                    .fill(hovering || dragValue != nil ? Color.spGreen : activeColor)
+                    .fill(hovering || dragValue != nil ? Color.spAccent : activeColor)
                     .frame(width: width * progress, height: 4)
                 if hovering || dragValue != nil {
                     Circle()
@@ -461,6 +469,16 @@ struct SeekBar: View {
         }
         .frame(height: 12)
         .onHover { hovering = $0 }
+        .accessibilityElement()
+        .accessibilityLabel(accessibilityName)
+        .accessibilityValue("\(Int(min(max(value, 0), 1) * 100)) percent")
+        .accessibilityAdjustableAction { direction in
+            switch direction {
+            case .increment: onSeek(min(value + 0.05, 1))
+            case .decrement: onSeek(max(value - 0.05, 0))
+            @unknown default: break
+            }
+        }
     }
 }
 
@@ -477,7 +495,7 @@ struct DownloadProgressCircle: View {
                 .stroke(Color.white.opacity(0.2), lineWidth: 2)
             Circle()
                 .trim(from: 0, to: max(progress, 0.03))
-                .stroke(Color.spGreen, style: StrokeStyle(lineWidth: 2, lineCap: .round))
+                .stroke(Color.spAccent, style: StrokeStyle(lineWidth: 2, lineCap: .round))
                 .rotationEffect(.degrees(-90))
         }
         .frame(width: size, height: size)
@@ -494,7 +512,7 @@ struct DownloadProgressView: View {
             HStack(spacing: 8) {
                 ProgressView(value: downloads.batchProgress)
                     .progressViewStyle(.linear)
-                    .tint(.spGreen)
+                    .tint(.spAccent)
                     .frame(width: 140)
                 Text("\(downloads.batchDone)/\(downloads.batchTotal)")
                     .font(.system(size: 11))

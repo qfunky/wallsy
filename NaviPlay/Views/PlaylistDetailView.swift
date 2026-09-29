@@ -2,6 +2,7 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 struct PlaylistDetailView: View {
+    @AppStorage("compactLists") private var compactLists = false
     @EnvironmentObject private var app: AppState
     @EnvironmentObject private var player: PlayerController
     @EnvironmentObject private var router: Router
@@ -80,7 +81,8 @@ struct PlaylistDetailView: View {
 
     private func header(_ playlist: Playlist) -> some View {
         HStack(alignment: .bottom, spacing: 20) {
-            PlaylistCoverView(playlistId: id, coverArt: playlist.coverArt, size: 200, corner: 8)
+            PlaylistCoverView(playlistId: id, coverArt: playlist.coverArt,
+                              size: compactLists ? 112 : 200, corner: 8)
                 .shadow(color: .black.opacity(0.5), radius: 20, y: 8)
                 .onTapGesture { showCoverPicker = true }
                 .help("Click to choose a custom cover")
@@ -148,7 +150,7 @@ struct PlaylistDetailView: View {
         if downloads.allCached(songs) {
             Image(systemName: "arrow.down.circle.fill")
                 .font(.system(size: 24))
-                .foregroundColor(.spGreen)
+                .foregroundColor(.spAccent)
                 .help("Available offline")
         } else {
             Button {
@@ -230,7 +232,7 @@ struct LikedSongsView: View {
                         RoundedRectangle(cornerRadius: 8)
                             .fill(
                                 LinearGradient(
-                                    colors: [Color(red: 0.27, green: 0.16, blue: 0.9), Color(red: 0.7, green: 0.75, blue: 0.95)],
+                                    colors: [Color.spAccentFill, Color.spCardHover],
                                     startPoint: .topLeading,
                                     endPoint: .bottomTrailing
                                 )
@@ -264,7 +266,7 @@ struct LikedSongsView: View {
                     if downloads.allCached(songs) {
                         Image(systemName: "arrow.down.circle.fill")
                             .font(.system(size: 24))
-                            .foregroundColor(.spGreen)
+                            .foregroundColor(.spAccent)
                     } else {
                         Button {
                             downloads.download(songs)

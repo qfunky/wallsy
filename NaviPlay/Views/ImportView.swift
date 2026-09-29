@@ -19,6 +19,7 @@ struct ImportView: View {
     @AppStorage("importFormat") private var format = "mp3"
     @AppStorage("importPlatform") private var platform = "youtube"
     @AppStorage("importDownloadMissing") private var downloadMissing = true
+    @AppStorage("importStarLikedSongs") private var starLikedSongs = true
 
     var body: some View {
         ScrollView {
@@ -27,9 +28,14 @@ struct ImportView: View {
                     .font(.system(size: 30, weight: .bold))
                     .foregroundColor(.white)
 
-                Text("Builds Navidrome playlists from Exportify CSV files. Tracks missing from the library are downloaded from YouTube via SpotFetch, then the library is rescanned.")
+                Text("Move your Spotify playlists from Exportify CSV files. Wallsy matches library tracks first, then downloads missing tracks through SpotFetch and saves a report for retrying unmatched songs.")
                     .font(.system(size: 12))
                     .foregroundColor(.spSubtext)
+
+                Link(destination: URL(string: "https://exportify.app/")!) {
+                    Label("Export Spotify playlists and Liked Songs as CSV", systemImage: "arrow.up.right.square")
+                        .font(.system(size: 12, weight: .medium))
+                }
 
                 // CSV files
                 groupBox("CSV FILES") {
@@ -41,7 +47,7 @@ struct ImportView: View {
                         ForEach(csvFiles, id: \.self) { url in
                             HStack {
                                 Image(systemName: "doc.text")
-                                    .foregroundColor(.spGreen)
+                                    .foregroundColor(.spAccent)
                                 Text(url.lastPathComponent)
                                     .font(.system(size: 12))
                                     .foregroundColor(.white)
@@ -58,6 +64,9 @@ struct ImportView: View {
                     }
                     Button("Add CSV Files…") { showCSVPicker = true }
                         .controlSize(.small)
+                    Toggle("Add tracks from Liked Songs CSV to Navidrome favorites", isOn: $starLikedSongs)
+                        .toggleStyle(.checkbox)
+                        .font(.system(size: 12))
                 }
 
                 // Download options
@@ -97,7 +106,7 @@ struct ImportView: View {
                                 .font(.system(size: 12))
                                 .frame(maxWidth: 360)
                         }
-                        Text("Use the SpotFetch virtualenv's python if yt-dlp isn't installed globally, e.g. …/SpotFetch/venv/bin/python3")
+                        Text("The built-in importer supports Python 3.9+. For downloads, choose SpotFetch's Python environment with its dependencies installed.")
                             .font(.system(size: 11))
                             .foregroundColor(.spSubtext)
                     }
@@ -110,10 +119,10 @@ struct ImportView: View {
                     } label: {
                         Label(runner.isRunning ? "Running…" : "Run Import", systemImage: "play.fill")
                             .font(.system(size: 13, weight: .bold))
-                            .foregroundColor(.black)
+                            .foregroundColor(.white)
                             .padding(.horizontal, 18)
                             .padding(.vertical, 8)
-                            .background(Capsule().fill(canRun ? Color.spGreen : Color.spGreen.opacity(0.35)))
+                            .background(Capsule().fill(canRun ? Color.spAccentFill : Color.spAccentFill.opacity(0.35)))
                     }
                     .buttonStyle(.plain)
                     .disabled(!canRun)
@@ -125,6 +134,26 @@ struct ImportView: View {
                     if !runner.log.isEmpty && !runner.isRunning {
                         Button("Clear Log") { runner.clearLog() }
                             .controlSize(.small)
+                    }
+                    if runner.canRetryMissing {
+                        Button("Retry \(runner.missing) missing") { runner.retryMissing() }
+                            .controlSize(.small)
+                    }
+                }
+
+                if runner.isRunning && runner.total > 0 {
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack {
+                            Text(runner.currentTrack)
+                                .lineLimit(1)
+                            Spacer()
+                            Text("\(runner.completed)/\(runner.total)")
+                                .monospacedDigit()
+                        }
+                        .font(.system(size: 12))
+                        .foregroundColor(.spSubtext)
+                        ProgressView(value: Double(runner.completed), total: Double(runner.total))
+                            .tint(.spAccent)
                     }
                 }
 
@@ -168,12 +197,25 @@ struct ImportView: View {
         .fileImporter(isPresented: $showSpotFetchPicker, allowedContentTypes: [.folder]) { result in
             if case .success(let url) = result { spotfetchDir = url.path }
         }
+        .onAppear(perform: selectSpotFetchPythonIfAvailable)
+        .onChange(of: spotfetchDir) {
+            selectSpotFetchPythonIfAvailable()
+        }
     }
 
     private var canRun: Bool {
         guard !runner.isRunning, !csvFiles.isEmpty, app.client != nil else { return false }
         if downloadMissing && musicDir.isEmpty { return false }
         return true
+    }
+
+    private func selectSpotFetchPythonIfAvailable() {
+        guard pythonPath == "/usr/bin/python3" else { return }
+        let candidate = URL(fileURLWithPath: spotfetchDir)
+            .appendingPathComponent(".venv/bin/python3").path
+        if FileManager.default.isExecutableFile(atPath: candidate) {
+            pythonPath = candidate
+        }
     }
 
     private func startImport() {
@@ -188,7 +230,8 @@ struct ImportView: View {
             pythonPath: pythonPath,
             format: format,
             platform: platform,
-            downloadMissing: downloadMissing
+            downloadMissing: downloadMissing,
+            starLikedSongs: starLikedSongs
         ))
     }
 
@@ -204,7 +247,11 @@ struct ImportView: View {
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: 8).fill(Color.spCard))
+        .background(RoundedRectangle(cornerRadius: 14).fill(Color.spCard))
+        .overlay {
+            RoundedRectangle(cornerRadius: 14)
+                .strokeBorder(Color.spBorder, lineWidth: 1)
+        }
     }
 
     private func pathRow(label: String, value: String, action: @escaping () -> Void) -> some View {

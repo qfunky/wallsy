@@ -10,17 +10,23 @@ struct LoginView: View {
 
     var body: some View {
         ZStack {
-            Color.spBackground.ignoresSafeArea()
+            LinearGradient(
+                colors: [Color(red: 0.08, green: 0.14, blue: 0.11), .spBackground, .spBackground],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+            .ignoresSafeArea()
 
             VStack(spacing: 24) {
                 VStack(spacing: 10) {
                     ZStack {
                         Circle()
-                            .fill(Color.spGreen)
+                            .fill(Color.spAccentFill)
                             .frame(width: 64, height: 64)
+                            .shadow(color: Color.spAccentFill.opacity(0.22), radius: 20, y: 8)
                         Image(systemName: "music.note")
                             .font(.system(size: 28, weight: .bold))
-                            .foregroundColor(.black)
+                            .foregroundColor(.white)
                     }
                     Text("Wallsy")
                         .font(.system(size: 30, weight: .bold))
@@ -101,7 +107,7 @@ struct LoginView: View {
                 Button(action: submit) {
                     ZStack {
                         Capsule()
-                            .fill(canSubmit ? Color.spGreen : Color.spGreen.opacity(0.4))
+                            .fill(canSubmit ? Color.spAccentFill : Color.spAccentFill.opacity(0.4))
                             .frame(width: 340, height: 46)
                         if app.isBusy {
                             ProgressView()
@@ -109,7 +115,7 @@ struct LoginView: View {
                         } else {
                             Text("Connect")
                                 .font(.system(size: 15, weight: .bold))
-                                .foregroundColor(.black)
+                                .foregroundColor(.white)
                         }
                     }
                 }

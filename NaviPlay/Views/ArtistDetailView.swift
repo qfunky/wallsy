@@ -82,10 +82,10 @@ struct ArtistDetailView: View {
                             .fontWeight(.bold)
                     }
                     .font(.system(size: 13))
-                    .foregroundColor(.black)
+                    .foregroundColor(.white)
                     .padding(.horizontal, 22)
                     .padding(.vertical, 10)
-                    .background(Capsule().fill(Color.spGreen))
+                    .background(Capsule().fill(Color.spAccentFill))
                 }
                 .buttonStyle(.plain)
                 .padding(.top, 6)

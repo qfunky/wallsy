@@ -14,6 +14,7 @@ enum SidebarSection: Hashable {
 }
 
 struct MainView: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @EnvironmentObject private var app: AppState
     @EnvironmentObject private var player: PlayerController
     @EnvironmentObject private var router: Router
@@ -38,7 +39,10 @@ struct MainView: View {
                 if showQueue {
                     QueueView()
                         .frame(width: 320)
-                        .background(Color.spCard)
+                        .background(.ultraThinMaterial)
+                        .overlay(alignment: .leading) {
+                            Color.spBorder.frame(width: 1)
+                        }
                         .transition(.move(edge: .trailing))
                 }
             }
@@ -48,6 +52,12 @@ struct MainView: View {
         .background(Color.spBackground)
         .onChange(of: selection) {
             router.reset()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .wallsySearch)) { _ in selection = .search }
+        .onReceive(NotificationCenter.default.publisher(for: .wallsyHome)) { _ in selection = .home }
+        .onReceive(NotificationCenter.default.publisher(for: .wallsyLiked)) { _ in selection = .liked }
+        .onReceive(NotificationCenter.default.publisher(for: .wallsyQueue)) { _ in
+            withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.2)) { showQueue.toggle() }
         }
     }
 
@@ -112,7 +122,26 @@ struct Sidebar: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
-            Spacer().frame(height: 14)
+            HStack(spacing: 11) {
+                Image(systemName: "waveform")
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundColor(.white)
+                    .frame(width: 34, height: 34)
+                    .background(RoundedRectangle(cornerRadius: 10).fill(Color.spAccentFill))
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("Wallsy")
+                        .font(.system(size: 17, weight: .bold, design: .rounded))
+                        .foregroundColor(.white)
+                    Text("YOUR MUSIC")
+                        .font(.system(size: 9, weight: .semibold))
+                        .tracking(1.7)
+                        .foregroundColor(.spSubtext)
+                }
+                Spacer()
+            }
+            .padding(.horizontal, 18)
+            .padding(.top, 18)
+            .padding(.bottom, 20)
 
             sidebarButton(.home, icon: "house.fill", label: "Home")
             sidebarButton(.search, icon: "magnifyingglass", label: "Search")
@@ -182,7 +211,7 @@ struct Sidebar: View {
                 .padding(.bottom, 4)
             }
 
-            Divider().background(Color.white.opacity(0.1))
+            Divider().background(Color.spBorder)
 
             HStack(spacing: 8) {
                 Image(systemName: "person.circle.fill")
@@ -215,9 +244,12 @@ struct Sidebar: View {
             .padding(.horizontal, 16)
             .padding(.vertical, 12)
         }
-        .frame(width: 230)
+        .frame(width: 246)
         .frame(maxHeight: .infinity)
-        .background(Color.black)
+        .background(Color.spCard)
+        .overlay(alignment: .trailing) {
+            Color.spBorder.frame(width: 1)
+        }
         .sheet(isPresented: $showSettings) {
             SettingsView()
         }
@@ -272,7 +304,7 @@ private struct PlaylistSidebarRow: View {
         )
         .background(
             RoundedRectangle(cornerRadius: 6)
-                .stroke(Color.spGreen, lineWidth: isDropTarget ? 1.5 : 0)
+                .stroke(Color.spAccent, lineWidth: isDropTarget ? 1.5 : 0)
                 .padding(.horizontal, 8)
         )
         .onDrop(of: [.plainText], isTargeted: $isDropTarget) { providers in
@@ -311,12 +343,16 @@ private struct SidebarRow: View {
                 Spacer(minLength: 0)
             }
             .foregroundColor(isSelected ? .white : (hovering ? .white : .spSubtext))
-            .padding(.horizontal, 16)
-            .padding(.vertical, 8)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 9)
             .background(
-                RoundedRectangle(cornerRadius: 6)
-                    .fill(isSelected ? Color.white.opacity(0.1) : Color.clear)
+                RoundedRectangle(cornerRadius: 11, style: .continuous)
+                    .fill(isSelected ? Color.spAccentFill.opacity(0.7) : (hovering ? Color.white.opacity(0.045) : Color.clear))
             )
+            .overlay {
+                RoundedRectangle(cornerRadius: 11, style: .continuous)
+                    .strokeBorder(isSelected ? Color.spAccent.opacity(0.28) : Color.clear, lineWidth: 1)
+            }
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -391,7 +427,7 @@ private struct QueueRow: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(song.title)
                     .font(.system(size: 13))
-                    .foregroundColor(isCurrent ? .spGreen : .white)
+                    .foregroundColor(isCurrent ? .spAccent : .white)
                     .lineLimit(1)
                 Text(song.artist ?? "")
                     .font(.system(size: 11))
@@ -402,7 +438,7 @@ private struct QueueRow: View {
             if isCurrent {
                 Image(systemName: isPlaying ? "speaker.wave.2.fill" : "speaker.fill")
                     .font(.system(size: 11))
-                    .foregroundColor(.spGreen)
+                    .foregroundColor(.spAccent)
             }
         }
         .padding(.horizontal, 8)

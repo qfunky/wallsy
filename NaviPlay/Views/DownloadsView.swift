@@ -3,6 +3,7 @@ import SwiftUI
 /// Shows everything in the offline cache. Fully functional without a network
 /// connection — playback uses the local files.
 struct DownloadsView: View {
+    @AppStorage("compactLists") private var compactLists = false
     @EnvironmentObject private var app: AppState
     @EnvironmentObject private var player: PlayerController
     @EnvironmentObject private var downloads: DownloadManager
@@ -19,14 +20,14 @@ struct DownloadsView: View {
                         RoundedRectangle(cornerRadius: 8)
                             .fill(
                                 LinearGradient(
-                                    colors: [Color(red: 0.05, green: 0.35, blue: 0.18), Color.spGreen],
+                                    colors: [Color.spAccentFill, Color.spCardHover],
                                     startPoint: .topLeading,
                                     endPoint: .bottomTrailing
                                 )
                             )
-                            .frame(width: 200, height: 200)
+                            .frame(width: compactLists ? 112 : 200, height: compactLists ? 112 : 200)
                         Image(systemName: "arrow.down.circle.fill")
-                            .font(.system(size: 64))
+                            .font(.system(size: compactLists ? 40 : 64))
                             .foregroundColor(.white)
                     }
                     .shadow(color: .black.opacity(0.5), radius: 20, y: 8)
@@ -56,6 +57,19 @@ struct DownloadsView: View {
                             player.play(songs)
                         }
                         DownloadProgressView()
+                    }
+                }
+
+                if downloads.activeCount > 0 {
+                    HStack(spacing: 10) {
+                        Text("\(downloads.activeCount) pending downloads")
+                            .font(.system(size: 12))
+                            .foregroundColor(.spSubtext)
+                        Button(downloads.isPaused ? "Resume" : "Pause") {
+                            if downloads.isPaused { downloads.resumeDownloads() }
+                            else { downloads.pauseDownloads() }
+                        }
+                        .controlSize(.small)
                     }
                 }
 

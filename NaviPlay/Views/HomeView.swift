@@ -12,9 +12,19 @@ struct HomeView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 28) {
-                Text(greeting)
-                    .font(.system(size: 30, weight: .bold))
-                    .foregroundColor(.white)
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("YOUR LIBRARY")
+                        .font(.system(size: 11, weight: .bold))
+                        .tracking(2.2)
+                        .foregroundColor(.spAccent)
+                    Text(greeting)
+                        .font(.system(size: 34, weight: .bold, design: .rounded))
+                        .foregroundColor(.white)
+                    Text("Pick up where the music left off.")
+                        .font(.system(size: 13))
+                        .foregroundColor(.spSubtext)
+                }
+                .padding(.top, 8)
 
                 if app.isOffline {
                     HStack(spacing: 8) {
@@ -43,14 +53,14 @@ struct HomeView: View {
                     shelf("Recently added", albums: newest)
                 }
             }
-            .padding(24)
+            .padding(28)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .background(
             LinearGradient(
                 stops: [
-                    .init(color: Color(red: 0.10, green: 0.16, blue: 0.30), location: 0),
-                    .init(color: Color.spBackground, location: 0.45),
+                    .init(color: Color(red: 0.075, green: 0.12, blue: 0.10), location: 0),
+                    .init(color: Color.spBackground, location: 0.50),
                     .init(color: Color.spBackground, location: 1),
                 ],
                 startPoint: .top,
@@ -155,10 +165,10 @@ private struct PillCard: View {
             }
             .frame(height: 52)
             .background(
-                RoundedRectangle(cornerRadius: 6, style: .continuous)
-                    .fill(hovering ? Color.white.opacity(0.18) : Color.white.opacity(0.09))
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(hovering ? Color.spCardHover : Color.spCard)
             )
-            .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         }
         .buttonStyle(.plain)
         .onHover { inside in
@@ -173,7 +183,7 @@ private struct PillCard: View {
         if isLiked {
             ZStack {
                 LinearGradient(
-                    colors: [Color(red: 0.27, green: 0.16, blue: 0.9), Color(red: 0.7, green: 0.75, blue: 0.95)],
+                    colors: [Color.spAccentFill, Color.spCardHover],
                     startPoint: .topLeading,
                     endPoint: .bottomTrailing
                 )
