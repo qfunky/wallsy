@@ -8,6 +8,9 @@ final class ImportRunner: ObservableObject {
     @Published private(set) var completed = 0
     @Published private(set) var total = 0
     @Published private(set) var missing = 0
+    @Published private(set) var downloaded = 0
+    @Published private(set) var alreadyInLibrary = 0
+    @Published private(set) var didFinish = false
     @Published private(set) var currentTrack = ""
 
     private var process: Process?
@@ -54,6 +57,15 @@ final class ImportRunner: ObservableObject {
                 log = "[!] Music folder is not writable: \(options.musicDir)\n"
                 return
             }
+            let systemPaths = ["/opt/homebrew/bin", "/usr/local/bin"]
+            let inheritedPaths = (ProcessInfo.processInfo.environment["PATH"] ?? "")
+                .split(separator: ":").map(String.init)
+            guard (systemPaths + inheritedPaths).contains(where: {
+                fileManager.isExecutableFile(atPath: $0 + "/ffmpeg")
+            }) else {
+                log = "[!] ffmpeg is required by SpotFetch. Install it with Homebrew before downloading.\n"
+                return
+            }
         }
 
         scopedURLs = options.csvFiles.filter { $0.startAccessingSecurityScopedResource() }
@@ -84,6 +96,9 @@ final class ImportRunner: ObservableObject {
         var env = ProcessInfo.processInfo.environment
         env["PYTHONUNBUFFERED"] = "1"
         env["WALLSY_PASSWORD"] = options.password
+        env["PATH"] = (["/opt/homebrew/bin", "/usr/local/bin"] +
+                       (env["PATH"] ?? "").split(separator: ":").map(String.init))
+            .joined(separator: ":")
         task.environment = env
 
         let pipe = Pipe()
@@ -107,8 +122,10 @@ final class ImportRunner: ObservableObject {
                 let tail = pipe.fileHandleForReading.readDataToEndOfFile()
                 self.consume(String(decoding: tail, as: UTF8.self) + "\n")
                 self.log += code == 0
-                    ? "\n✔ Finished successfully.\n"
-                    : "\n[!] Exited with code \(code).\n"
+                    ? "\n✔ Import complete. See file counts above.\n"
+                    : code == 2
+                        ? "\n[!] Import incomplete: some tracks are still missing.\n"
+                        : "\n[!] Exited with code \(code).\n"
                 self.isRunning = false
                 self.process = nil
                 self.scopedURLs.forEach { $0.stopAccessingSecurityScopedResource() }
@@ -120,6 +137,9 @@ final class ImportRunner: ObservableObject {
         completed = 0
         total = 0
         missing = 0
+        downloaded = 0
+        alreadyInLibrary = 0
+        didFinish = false
         currentTrack = ""
         pendingOutput = ""
         lastOptions = options
@@ -164,6 +184,9 @@ final class ImportRunner: ObservableObject {
                 currentTrack = value["title"] as? String ?? currentTrack
             case "finished":
                 missing = value["missing"] as? Int ?? 0
+                downloaded = value["downloaded"] as? Int ?? 0
+                alreadyInLibrary = value["existing"] as? Int ?? 0
+                didFinish = true
             default: break
             }
         }

@@ -76,7 +76,7 @@ Or open `NaviPlay.xcodeproj` in Xcode 16+ and press ⌘R. To produce a DMG:
 
 Matched tracks are assembled into a playlist immediately; missing ones are downloaded from YouTube, the library is rescanned, and the playlist is updated. The same tool works headless: `tools/wallsy_import.py --help`.
 
-Wallsy saves an import report per CSV and server. Use **Retry missing** after adding files or fixing download dependencies; already matched tracks keep their original positions. A file named `Liked Songs.csv` or `Saved Tracks.csv` can also populate Navidrome favorites. No Spotify account connection is required.
+Wallsy saves an import report per CSV and server. It downloads only tracks that do not match the Navidrome library; when every CSV track is already on the server, no files are written to the selected music folder. That folder must be writable from the Mac and scanned by Navidrome (use a mounted server share when Navidrome runs elsewhere). The import summary reports files actually created and tracks still missing. Use **Retry missing** after adding files or fixing download dependencies; already matched tracks keep their original positions. A file named `Liked Songs.csv` or `Saved Tracks.csv` can also populate Navidrome favorites. No Spotify account connection is required.
 
 The bundled importer runs on macOS's Python 3.9. If that interpreter prints an `urllib3` LibreSSL warning, choose a Python environment built with OpenSSL in the Import tab, or use `urllib3<2` in that environment. For downloading, use the Python environment that has SpotFetch's dependencies installed.
 

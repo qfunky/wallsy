@@ -76,9 +76,12 @@ struct ImportView: View {
                         .font(.system(size: 12))
 
                     if downloadMissing {
-                        pathRow(label: "Music folder (scanned by Navidrome)", value: musicDir.isEmpty ? "not set" : musicDir) {
+                        pathRow(label: "Navidrome music folder (mounted on this Mac)", value: musicDir.isEmpty ? "not set" : musicDir) {
                             showMusicDirPicker = true
                         }
+                        Text("Downloads are saved on this Mac. If Navidrome runs on another machine, choose a mounted share of its music folder; a local Downloads folder will not be scanned by the server.")
+                            .font(.system(size: 11))
+                            .foregroundColor(.spSubtext)
                         pathRow(label: "SpotFetch folder", value: spotfetchDir) {
                             showSpotFetchPicker = true
                         }
@@ -96,6 +99,11 @@ struct ImportView: View {
                             .frame(width: 160)
                         }
                         .font(.system(size: 12))
+                        if format == "flac" {
+                            Text("YouTube audio is usually lossy; converting it to FLAC does not make it lossless.")
+                                .font(.system(size: 11))
+                                .foregroundColor(.spSubtext)
+                        }
 
                         HStack {
                             Text("Python")
@@ -155,6 +163,12 @@ struct ImportView: View {
                         ProgressView(value: Double(runner.completed), total: Double(runner.total))
                             .tint(.spAccent)
                     }
+                }
+
+                if runner.didFinish && !runner.isRunning {
+                    Text("Already in Navidrome: \(runner.alreadyInLibrary) · Downloaded: \(runner.downloaded) · Still missing: \(runner.missing)")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(.spSubtext)
                 }
 
                 // Log output

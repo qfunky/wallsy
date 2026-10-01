@@ -150,40 +150,47 @@ def normalize(text: str) -> str:
     return re.sub(r"\s+", " ", text).strip()
 
 
+def artist_matches(want: str, got: str) -> bool:
+    """Accept the primary artist alone or as a separate credited artist."""
+    if normalize(got) == want:
+        return True
+    credited = re.split(r"\s*(?:,|;|&|/|\bfeat\.?\b|\bft\.?\b)\s*", got, flags=re.IGNORECASE)
+    return want in {normalize(artist) for artist in credited}
+
+
 def best_match(track: dict, candidates: list) -> str | None:
-    """Returns the matched song id or None."""
+    """Match a recording only when title, credited artist and duration agree."""
     want_title = normalize(track["title"])
     want_artist = normalize(track["artist"])
     want_album = normalize(track.get("album", ""))
     want_ms = track.get("duration_ms")
 
-    best, best_score = None, 0.0
+    if not want_title or not want_artist:
+        return None
+    best, best_score = None, -1.0
     for c in candidates:
-        got_title = normalize(c.get("title", ""))
-        got_artist = normalize(c.get("artist", ""))
-        score = 0.0
-        title_score = 0.0
-        artist_score = 0.0
-        if got_title == want_title:
-            title_score = 2
-        elif want_title and (want_title in got_title or got_title in want_title):
-            title_score = 1.2
-        if got_artist == want_artist:
-            artist_score = 2
-        elif want_artist and (want_artist in got_artist or got_artist in want_artist):
-            artist_score = 1.2
-        # Duration alone must never turn a different artist into a match.
-        if not title_score or not artist_score:
+        if normalize(c.get("title", "")) != want_title:
             continue
-        score += title_score + artist_score
+        if not artist_matches(want_artist, c.get("artist", "")):
+            continue
+        duration = c.get("duration")
+        if want_ms and duration and abs(duration - want_ms / 1000) > 10:
+            continue
+        score = 1.0
         if want_album and normalize(c.get("album", "")) == want_album:
-            score += 0.4
-        if want_ms and c.get("duration"):
-            if abs(c["duration"] - want_ms / 1000) <= 15:
-                score += 0.5
+            score += 1.0
+        if want_ms and duration:
+            score += 1.0 - min(abs(duration - want_ms / 1000) / 10, 1)
         if score > best_score:
             best, best_score = c, score
-    return best["id"] if best is not None and best_score >= 2.4 else None
+    return best["id"] if best is not None else None
+
+
+def audio_files(directory: Path, format: str) -> dict:
+    """Track actual output so an empty/failed SpotFetch run is not called a download."""
+    return {str(file): (file.stat().st_size, file.stat().st_mtime_ns)
+            for file in directory.iterdir()
+            if file.is_file() and file.suffix.lower() == f".{format}" and file.stat().st_size > 0}
 
 
 def find_song(api: Subsonic, track: dict) -> str | None:
@@ -287,6 +294,8 @@ def main():
     api = Subsonic(args.server, args.user, args.password, args.proxy)
 
     total_missing = 0
+    total_downloaded = 0
+    total_existing = 0
     for path in csv_paths:
         playlist_name = path.stem.replace("_", " ").strip()
         tracks = read_exportify_csv(path)
@@ -325,8 +334,13 @@ def main():
             save_report(state_file, report)
             emit("progress", name=playlist_name, completed=processed,
                  total=len(tracks), title=track["title"])
-        print(f"    matched {len(matched)}, missing {len(missing)}")
+        existing_count = len(matched)
+        total_existing += existing_count
+        print(f"    already in Navidrome: {existing_count}; missing: {len(missing)}")
+        if not missing:
+            print("    Download skipped: every CSV track matched the server library; 0 files downloaded.")
 
+        downloaded_here = 0
         if missing and downloader:
             out_dir = os.path.join(args.music_dir, "Wallsy Imports", playlist_name)
             os.makedirs(out_dir, exist_ok=True)
@@ -334,17 +348,28 @@ def main():
                 t = tracks[index]
                 print(f"    ↓ downloading: {t['artist']} — {t['title']}")
                 try:
+                    before = audio_files(Path(out_dir), args.format)
                     downloader(
                         {"track_name": t["title"], "artist_name": t["all_artists"]},
                         args.format, output_path=out_dir,
                         cookiefile=args.cookies, platform=args.platform,
                     )
+                    after = audio_files(Path(out_dir), args.format)
+                    changed = [file for file, state in after.items() if before.get(file) != state]
+                    if not changed:
+                        raise RuntimeError("SpotFetch returned without creating an audio file")
+                    downloaded_here += 1
+                    print(f"      saved: {', '.join(Path(file).name for file in changed)}")
                 except Exception as e:
                     print(f"      [!] failed: {e}")
 
-            print("    rescanning library…")
-            api.start_scan()
-            api.wait_for_scan()
+            total_downloaded += downloaded_here
+            print(f"    Downloaded {downloaded_here} of {len(missing)} missing tracks to {out_dir}")
+
+            if downloaded_here:
+                print("    rescanning library…")
+                api.start_scan()
+                api.wait_for_scan()
 
             still_missing = []
             for index in missing:
@@ -366,15 +391,20 @@ def main():
         else:
             print(f"    [!] No tracks matched; playlist “{playlist_name}” was not changed.")
         total_missing += len(missing)
-        emit("complete", name=playlist_name, matched=len(found_ids), missing=len(missing))
+        emit("complete", name=playlist_name, matched=len(found_ids), missing=len(missing),
+             downloaded=downloaded_here)
         if missing:
             print("    Tracks not found (check/download manually):")
             for index in missing:
                 t = tracks[index]
                 print(f"      • {t['artist']} — {t['title']}")
 
-    emit("finished", missing=total_missing)
+    print(f"\nImport summary: {total_existing} already in Navidrome, "
+          f"{total_downloaded} downloaded, {total_missing} still missing.")
+    emit("finished", missing=total_missing, downloaded=total_downloaded,
+         existing=total_existing)
+    return 2 if total_missing and downloader else 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

@@ -7,6 +7,7 @@ import json
 from pathlib import Path
 import sys
 import tempfile
+import types
 import unittest
 from unittest.mock import patch
 
@@ -53,6 +54,90 @@ class ImporterTests(unittest.TestCase):
         candidate = {"id": "wrong", "title": "Song", "artist": "Other",
                      "duration": 100}
         self.assertIsNone(importer.best_match(track, [candidate]))
+
+    def test_matching_rejects_partial_title_artist_and_wrong_duration(self):
+        track = {"title": "Клей", "artist": "CUPSIZE", "duration_ms": 146000}
+        candidates = [
+            {"id": "partial-title", "title": "Клей навсегда", "artist": "CUPSIZE", "duration": 146},
+            {"id": "partial-artist", "title": "Клей", "artist": "CUPSIZE2", "duration": 146},
+            {"id": "wrong-duration", "title": "Клей", "artist": "CUPSIZE", "duration": 200},
+        ]
+        self.assertIsNone(importer.best_match(track, candidates))
+        self.assertEqual(importer.best_match(track, [
+            {"id": "credited", "title": "Клей", "artist": "CUPSIZE, Guest", "duration": 146}
+        ]), "credited")
+
+    def test_download_is_not_reported_when_spotfetch_creates_no_file(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            csv = root / "Playlist.csv"
+            csv.write_text("Track Name,Artist Name(s)\nB,Artist\n", encoding="utf-8")
+            spotfetch = root / "SpotFetch"
+            spotfetch.mkdir()
+            (spotfetch / "functions.py").write_text("", encoding="utf-8")
+            server = FakeServer()
+            fake_functions = types.SimpleNamespace(download_from_query=lambda *args, **kwargs: None)
+            argv = [str(SCRIPT), str(csv), "--server", "http://example.test",
+                    "--user", "user", "--password", "secret", "--music-dir", directory,
+                    "--spotfetch", str(spotfetch), "--report-dir", directory]
+            output = io.StringIO()
+            with patch.object(importer, "Subsonic", return_value=server), \
+                 patch.dict(sys.modules, {"functions": fake_functions}), \
+                 patch.object(sys, "argv", argv), contextlib.redirect_stdout(output):
+                result = importer.main()
+            self.assertEqual(result, 2)
+            self.assertIn("Downloaded 0 of 1", output.getvalue())
+            self.assertIn("SpotFetch returned without creating an audio file", output.getvalue())
+
+    def test_existing_server_track_skips_download_explicitly(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            csv = root / "Playlist.csv"
+            csv.write_text("Track Name,Artist Name(s)\nA,Artist\n", encoding="utf-8")
+            spotfetch = root / "SpotFetch"
+            spotfetch.mkdir()
+            (spotfetch / "functions.py").write_text("", encoding="utf-8")
+            attempted = []
+            fake_functions = types.SimpleNamespace(download_from_query=lambda *args, **kwargs: attempted.append(args))
+            argv = [str(SCRIPT), str(csv), "--server", "http://example.test",
+                    "--user", "user", "--password", "secret", "--music-dir", directory,
+                    "--spotfetch", str(spotfetch), "--report-dir", directory]
+            output = io.StringIO()
+            with patch.object(importer, "Subsonic", return_value=FakeServer()), \
+                 patch.dict(sys.modules, {"functions": fake_functions}), \
+                 patch.object(sys, "argv", argv), contextlib.redirect_stdout(output):
+                result = importer.main()
+            self.assertEqual(result, 0)
+            self.assertFalse(attempted)
+            self.assertIn("Download skipped: every CSV track matched", output.getvalue())
+            self.assertIn("0 downloaded", output.getvalue())
+
+    def test_downloaded_file_is_incomplete_until_navidrome_finds_it(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            csv = root / "Playlist.csv"
+            csv.write_text("Track Name,Artist Name(s)\nB,Artist\n", encoding="utf-8")
+            spotfetch = root / "SpotFetch"
+            spotfetch.mkdir()
+            (spotfetch / "functions.py").write_text("", encoding="utf-8")
+
+            def download(song, format, output_path, **kwargs):
+                Path(output_path, "B.mp3").write_bytes(b"audio")
+
+            server = FakeServer()
+            server.start_scan = lambda: None
+            server.wait_for_scan = lambda: None
+            fake_functions = types.SimpleNamespace(download_from_query=download)
+            argv = [str(SCRIPT), str(csv), "--server", "http://example.test",
+                    "--user", "user", "--password", "secret", "--music-dir", directory,
+                    "--spotfetch", str(spotfetch), "--report-dir", directory]
+            output = io.StringIO()
+            with patch.object(importer, "Subsonic", return_value=server), \
+                 patch.dict(sys.modules, {"functions": fake_functions}), \
+                 patch.object(sys, "argv", argv), contextlib.redirect_stdout(output):
+                result = importer.main()
+            self.assertEqual(result, 2)
+            self.assertIn("1 downloaded, 1 still missing", output.getvalue())
 
     def test_retry_only_missing_keeps_original_order(self):
         with tempfile.TemporaryDirectory() as directory:
