@@ -282,9 +282,17 @@ final class EqualizerTapState {
                     .takeUnretainedValue().process(buffers, frames: received)
             }
         )
+        #if compiler(>=6.4)
         var tap: MTAudioProcessingTap?
         let status = MTAudioProcessingTapCreate(kCFAllocatorDefault, &callbacks,
                                                kMTAudioProcessingTapCreationFlag_PostEffects, &tap)
+        #else
+        // Xcode 16 imports the Create-rule CF result as Unmanaged.
+        var unmanagedTap: Unmanaged<MTAudioProcessingTap>?
+        let status = MTAudioProcessingTapCreate(kCFAllocatorDefault, &callbacks,
+                                               kMTAudioProcessingTapCreationFlag_PostEffects, &unmanagedTap)
+        let tap = unmanagedTap?.takeRetainedValue()
+        #endif
         if status != noErr { retained.release() }
         return status == noErr ? tap : nil
     }
