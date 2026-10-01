@@ -44,7 +44,7 @@ struct StatsView: View {
             VStack(alignment: .leading, spacing: 28) {
                 Text("Statistics")
                     .font(.system(size: 30, weight: .bold))
-                    .foregroundColor(.white)
+                    .foregroundColor(.spText)
 
                 if !loaded {
                     HStack {
@@ -94,7 +94,7 @@ struct StatsView: View {
                                                 .monospacedDigit()
                                             Text(entry.name)
                                                 .font(.system(size: 14, weight: .semibold))
-                                                .foregroundColor(.white)
+                                                .foregroundColor(.spText)
                                             Spacer()
                                             Text("\(entry.plays) plays")
                                                 .font(.system(size: 12))

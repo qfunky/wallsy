@@ -19,7 +19,7 @@ struct HomeView: View {
                         .foregroundColor(.spAccent)
                     Text(greeting)
                         .font(.system(size: 34, weight: .bold, design: .rounded))
-                        .foregroundColor(.white)
+                        .foregroundColor(.spText)
                     Text("Pick up where the music left off.")
                         .font(.system(size: 13))
                         .foregroundColor(.spSubtext)
@@ -32,7 +32,7 @@ struct HomeView: View {
                             .foregroundColor(.orange)
                         Text("You're offline. Downloaded tracks are available in the Downloads tab.")
                             .font(.system(size: 13))
-                            .foregroundColor(.white)
+                            .foregroundColor(.spText)
                     }
                     .padding(12)
                     .background(RoundedRectangle(cornerRadius: 8).fill(Color.orange.opacity(0.15)))
@@ -59,7 +59,7 @@ struct HomeView: View {
         .background(
             LinearGradient(
                 stops: [
-                    .init(color: Color(red: 0.075, green: 0.12, blue: 0.10), location: 0),
+                    .init(color: Color.spAccentFill.opacity(AppTheme.current.isLight ? 0.3 : 0.45), location: 0),
                     .init(color: Color.spBackground, location: 0.50),
                     .init(color: Color.spBackground, location: 1),
                 ],
@@ -151,7 +151,7 @@ private struct PillCard: View {
 
                 Text(title)
                     .font(.system(size: 14, weight: .bold))
-                    .foregroundColor(.white)
+                    .foregroundColor(.spText)
                     .lineLimit(2)
                     .padding(.horizontal, 12)
 
@@ -189,7 +189,7 @@ private struct PillCard: View {
                 )
                 Image(systemName: "heart.fill")
                     .font(.system(size: 18))
-                    .foregroundColor(.white)
+                    .foregroundColor(.spText)
             }
         } else if let playlistId {
             PlaylistCoverView(playlistId: playlistId, coverArt: coverArt, size: 52, corner: 0)

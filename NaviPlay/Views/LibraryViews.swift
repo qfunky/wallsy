@@ -125,7 +125,7 @@ struct TracksView: View {
             HStack(alignment: .firstTextBaseline) {
                 Text("Tracks")
                     .font(.system(size: 30, weight: .bold))
-                    .foregroundColor(.white)
+                    .foregroundColor(.spText)
                 if loaded {
                     Text("\(songs.count)")
                         .font(.system(size: 14))
@@ -145,7 +145,7 @@ struct TracksView: View {
                 }
                 .padding(.horizontal, 10)
                 .padding(.vertical, 6)
-                .background(Capsule().fill(Color.white.opacity(0.1)))
+                .background(Capsule().fill(Color.spSubtleFill))
                 .frame(maxWidth: 280)
 
                 Text(selection.isEmpty ? "No selection" : "\(selection.count) selected")
@@ -163,7 +163,7 @@ struct TracksView: View {
                         .font(.system(size: 12, weight: .semibold))
                 }
                 .buttonStyle(.plain)
-                .foregroundColor(selection.isEmpty ? .spSubtext : .white)
+                .foregroundColor(selection.isEmpty ? .spSubtext : .spText)
                 .disabled(selection.isEmpty)
 
                 Menu {
@@ -186,7 +186,7 @@ struct TracksView: View {
                 }
                 .menuStyle(.borderlessButton)
                 .fixedSize()
-                .foregroundColor(selection.isEmpty ? .spSubtext : .white)
+                .foregroundColor(selection.isEmpty ? .spSubtext : .spText)
                 .disabled(selection.isEmpty)
 
                 Button("Deselect") {
@@ -250,7 +250,7 @@ struct ArtistsView: View {
             VStack(alignment: .leading, spacing: 20) {
                 Text("Artists")
                     .font(.system(size: 30, weight: .bold))
-                    .foregroundColor(.white)
+                    .foregroundColor(.spText)
 
                 if !loaded {
                     HStack {

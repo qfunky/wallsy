@@ -46,6 +46,7 @@ struct SearchView: View {
         .task(id: query) {
             await performSearch()
         }
+        .task { await app.refreshLibrary() }
         .onAppear { fieldFocused = true }
     }
 
@@ -73,7 +74,7 @@ struct SearchView: View {
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
-        .background(Capsule().fill(Color.white.opacity(0.1)))
+        .background(Capsule().fill(Color.spSubtleFill))
         .frame(maxWidth: 420)
     }
 
@@ -186,7 +187,7 @@ struct ArtistCircle: View {
 
                 Text(artist.name)
                     .font(.system(size: 13, weight: .semibold))
-                    .foregroundColor(.white)
+                    .foregroundColor(.spText)
                     .lineLimit(1)
                 Text("Artist")
                     .font(.system(size: 11))

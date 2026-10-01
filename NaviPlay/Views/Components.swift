@@ -4,14 +4,83 @@ import UniformTypeIdentifiers
 
 // MARK: - Theme
 
+enum AppTheme: String, CaseIterable, Identifiable {
+    case emerald, forest, sage, graphite, midnight, charcoal, light
+
+    static let storageKey = "appTheme"
+    static var current: AppTheme {
+        AppTheme(rawValue: UserDefaults.standard.string(forKey: storageKey) ?? "") ?? .emerald
+    }
+
+    var id: String { rawValue }
+    var isLight: Bool { self == .light }
+
+    var name: String {
+        switch self {
+        case .emerald: "Emerald"
+        case .forest: "Forest"
+        case .sage: "Sage"
+        case .graphite: "Graphite"
+        case .midnight: "Midnight"
+        case .charcoal: "Charcoal"
+        case .light: "Light"
+        }
+    }
+
+    var group: String {
+        switch self {
+        case .emerald, .forest, .sage: "GREEN"
+        case .graphite, .midnight, .charcoal: "DARK"
+        case .light: "LIGHT"
+        }
+    }
+
+    // Background, surface, hovered surface, accent, filled control, secondary text, primary text.
+    private var values: [[Double]] {
+        switch self {
+        case .emerald:
+            [[10,13,12], [19,24,22], [29,37,33], [128,177,151], [34,83,62], [164,174,167], [245,248,246]]
+        case .forest:
+            [[8,18,15], [15,31,25], [25,45,35], [138,193,159], [29,83,56], [157,181,166], [243,249,244]]
+        case .sage:
+            [[17,21,17], [29,36,29], [41,50,40], [167,194,158], [64,91,65], [169,181,165], [247,249,244]]
+        case .graphite:
+            [[13,14,16], [25,26,29], [38,39,43], [184,190,199], [63,67,74], [165,169,176], [247,248,250]]
+        case .midnight:
+            [[10,14,23], [20,26,39], [33,41,57], [155,176,211], [48,66,97], [155,166,183], [244,247,253]]
+        case .charcoal:
+            [[18,17,17], [31,29,29], [45,42,41], [204,186,169], [88,72,64], [175,166,161], [251,248,245]]
+        case .light:
+            [[246,248,246], [255,255,255], [233,239,234], [35,104,74], [215,234,221], [91,104,95], [25,37,30]]
+        }
+    }
+
+    private func color(_ index: Int) -> Color {
+        let rgb = values[index]
+        return Color(red: rgb[0] / 255, green: rgb[1] / 255, blue: rgb[2] / 255)
+    }
+
+    var background: Color { color(0) }
+    var card: Color { color(1) }
+    var cardHover: Color { color(2) }
+    var accent: Color { color(3) }
+    var accentFill: Color { color(4) }
+    var subtext: Color { color(5) }
+    var text: Color { color(6) }
+    var border: Color { isLight ? Color.black.opacity(0.1) : Color.white.opacity(0.08) }
+    var subtleFill: Color { isLight ? Color.black.opacity(0.055) : Color.white.opacity(0.08) }
+}
+
 extension Color {
-    static let spBackground = Color(red: 10 / 255, green: 13 / 255, blue: 12 / 255)
-    static let spCard = Color(red: 19 / 255, green: 24 / 255, blue: 22 / 255)
-    static let spCardHover = Color(red: 29 / 255, green: 37 / 255, blue: 33 / 255)
-    static let spAccent = Color(red: 128 / 255, green: 177 / 255, blue: 151 / 255)
-    static let spAccentFill = Color(red: 34 / 255, green: 83 / 255, blue: 62 / 255)
-    static let spSubtext = Color(red: 164 / 255, green: 174 / 255, blue: 167 / 255)
-    static let spBorder = Color.white.opacity(0.08)
+    static var spBackground: Color { AppTheme.current.background }
+    static var spCard: Color { AppTheme.current.card }
+    static var spCardHover: Color { AppTheme.current.cardHover }
+    static var spAccent: Color { AppTheme.current.accent }
+    static var spAccentFill: Color { AppTheme.current.accentFill }
+    static var spSubtext: Color { AppTheme.current.subtext }
+    static var spText: Color { AppTheme.current.text }
+    static var spBorder: Color { AppTheme.current.border }
+    static var spSubtleFill: Color { AppTheme.current.subtleFill }
 }
 
 // MARK: - Formatting helpers
@@ -112,7 +181,7 @@ struct PlayCircleButton: View {
                     .shadow(color: .black.opacity(0.5), radius: 6, y: 3)
                 Image(systemName: "play.fill")
                     .font(.system(size: diameter * 0.4, weight: .bold))
-                    .foregroundColor(.white)
+                    .foregroundColor(.spText)
             }
         }
         .buttonStyle(.plain)
@@ -146,7 +215,7 @@ struct AlbumCard: View {
                 }
                 Text(album.name)
                     .font(.system(size: 14, weight: .semibold))
-                    .foregroundColor(.white)
+                    .foregroundColor(.spText)
                     .lineLimit(1)
                 Text(albumSubtitle)
                     .font(.system(size: 12))
@@ -243,7 +312,7 @@ struct TrackRow: View {
                     Button(action: onPlay) {
                         Image(systemName: "play.fill")
                             .font(.system(size: 11))
-                            .foregroundColor(.white)
+                            .foregroundColor(.spText)
                     }
                     .buttonStyle(.plain)
                 } else if isCurrent {
@@ -266,7 +335,7 @@ struct TrackRow: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(song.title)
                     .font(.system(size: 14))
-                    .foregroundColor(isCurrent ? .spAccent : .white)
+                    .foregroundColor(isCurrent ? .spAccent : .spText)
                     .lineLimit(1)
                 if let artist = song.artist {
                     Text(artist)
@@ -286,16 +355,6 @@ struct TrackRow: View {
                     .frame(maxWidth: 240, alignment: .leading)
             }
 
-            Button {
-                app.toggleStar(song)
-            } label: {
-                Image(systemName: app.isStarred(song) ? "heart.fill" : "heart")
-                    .font(.system(size: 12))
-                    .foregroundColor(app.isStarred(song) ? .spAccent : .spSubtext)
-            }
-            .buttonStyle(.plain)
-            .opacity(hovering || app.isStarred(song) ? 1 : 0)
-
             downloadBadge
                 .frame(width: 16)
 
@@ -304,6 +363,33 @@ struct TrackRow: View {
                 .foregroundColor(.spSubtext)
                 .monospacedDigit()
                 .frame(width: 44, alignment: .trailing)
+
+            Button {
+                app.toggleStar(song)
+            } label: {
+                Image(systemName: app.isStarred(song) ? "heart.fill" : "heart")
+                    .font(.system(size: 12))
+                    .foregroundColor(app.isStarred(song) ? .spAccent : .spSubtext)
+                    .frame(width: 24, height: 26)
+            }
+            .buttonStyle(.plain)
+            .opacity(hovering || app.isStarred(song) ? 1 : 0)
+            .help(app.isStarred(song) ? "Remove from Liked Songs" : "Add to Liked Songs")
+
+            Menu {
+                trackActions
+            } label: {
+                Image(systemName: "ellipsis")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundColor(.spSubtext)
+                    .frame(width: 26, height: 26)
+                    .contentShape(Rectangle())
+            }
+            .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
+            .fixedSize()
+            .help("More options for \(song.title)")
+            .accessibilityLabel("More options for \(song.title)")
         }
         .padding(.horizontal, 12)
         .padding(.vertical, compactLists ? 3 : 6)
@@ -311,26 +397,27 @@ struct TrackRow: View {
             RoundedRectangle(cornerRadius: 9, style: .continuous)
                 .fill(
                     isSelected
-                        ? Color.white.opacity(0.18)
-                        : (hovering ? Color.white.opacity(0.08) : Color.clear)
+                        ? Color.spAccent.opacity(0.22)
+                        : (hovering ? Color.spSubtleFill : Color.clear)
                 )
         )
         .contentShape(Rectangle())
         .onTapGesture(count: 2, perform: onPlay)
         .onHover { hovering = $0 }
         .contextMenu {
+            trackActions
+        }
+    }
+
+    @ViewBuilder
+    private var trackActions: some View {
             Button("Play") { onPlay() }
             Button("Play Next") { player.playNext(song) }
             Button("Add to Queue") { player.addToQueue(song) }
             Divider()
-            if !app.playlists.isEmpty {
-                Menu("Add to Playlist") {
-                    ForEach(app.playlists) { playlist in
-                        Button(playlist.name) {
-                            Task { await app.addSongs([song.id], toPlaylist: playlist.id) }
-                        }
-                    }
-                }
+            Button("Add to Playlist…") {
+                // Present after the menu closes; presenting inside a nested macOS menu can flicker.
+                DispatchQueue.main.async { app.playlistPickerSong = song }
             }
             if let onRemove {
                 Button("Remove from Playlist", role: .destructive) { onRemove() }
@@ -346,7 +433,6 @@ struct TrackRow: View {
             Button(app.isStarred(song) ? "Remove from Liked Songs" : "Add to Liked Songs") {
                 app.toggleStar(song)
             }
-        }
     }
 }
 
@@ -423,7 +509,7 @@ struct ReorderableRow<Content: View>: View {
 struct SeekBar: View {
     /// Current progress, 0...1.
     var value: Double
-    var activeColor: Color = .white
+    var activeColor: Color = .spText
     var accessibilityName: String = "Progress"
     /// Called continuously while dragging (used by the volume slider).
     var onChanging: ((Double) -> Void)? = nil
@@ -439,14 +525,14 @@ struct SeekBar: View {
 
             ZStack(alignment: .leading) {
                 Capsule()
-                    .fill(Color.white.opacity(0.25))
+                    .fill(Color.spSubtext.opacity(0.35))
                     .frame(height: 4)
                 Capsule()
                     .fill(hovering || dragValue != nil ? Color.spAccent : activeColor)
                     .frame(width: width * progress, height: 4)
                 if hovering || dragValue != nil {
                     Circle()
-                        .fill(Color.white)
+                        .fill(Color.spText)
                         .frame(width: 11, height: 11)
                         .offset(x: width * progress - 5.5)
                 }
@@ -492,7 +578,7 @@ struct DownloadProgressCircle: View {
     var body: some View {
         ZStack {
             Circle()
-                .stroke(Color.white.opacity(0.2), lineWidth: 2)
+                .stroke(Color.spBorder, lineWidth: 2)
             Circle()
                 .trim(from: 0, to: max(progress, 0.03))
                 .stroke(Color.spAccent, style: StrokeStyle(lineWidth: 2, lineCap: .round))
@@ -531,7 +617,7 @@ struct SectionHeader: View {
     var body: some View {
         Text(title)
             .font(.system(size: 22, weight: .bold))
-            .foregroundColor(.white)
+            .foregroundColor(.spText)
     }
 }
 

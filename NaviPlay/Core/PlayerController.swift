@@ -36,6 +36,35 @@ final class PlayerController: ObservableObject {
     @Published var crossfadeDuration: Double {
         didSet { UserDefaults.standard.set(crossfadeDuration, forKey: "crossfadeDuration") }
     }
+    @Published private(set) var equalizerSettings = EqualizerSettings() {
+        didSet {
+            if let data = try? JSONEncoder().encode(equalizerSettings) {
+                UserDefaults.standard.set(data, forKey: "equalizerSettings")
+            }
+            for state in tapStates.compactMap({ $0 }) { state.update(equalizerSettings) }
+            if equalizerSettings.enabled {
+                for index in players.indices {
+                    if let item = players[index].currentItem { attachEqualizer(to: item, playerIndex: index) }
+                }
+            }
+        }
+    }
+
+    func setEqualizerEnabled(_ enabled: Bool) {
+        equalizerSettings.enabled = enabled
+    }
+
+    func selectEqualizerMode(_ mode: EqualizerMode) {
+        equalizerSettings.selectMode(mode)
+    }
+
+    func selectEqualizerPreset(_ preset: EqualizerPreset) {
+        equalizerSettings.select(preset)
+    }
+
+    func setEqualizerGain(_ value: Double, at index: Int) {
+        equalizerSettings.setGain(value, at: index)
+    }
 
     var client: SubsonicClient?
     weak var downloads: DownloadManager?
@@ -48,6 +77,8 @@ final class PlayerController: ObservableObject {
     // MARK: - Internals
 
     private let players = [AVPlayer(), AVPlayer()]
+    private var tapStates: [EqualizerTapState?] = [nil, nil]
+    private var pendingTapItems: [ObjectIdentifier?] = [nil, nil]
     private var activeIdx = 0
     private var activePlayer: AVPlayer { players[activeIdx] }
 
@@ -79,6 +110,11 @@ final class PlayerController: ObservableObject {
         let stored = UserDefaults.standard.object(forKey: "crossfadeDuration") as? Double
         crossfadeDuration = stored ?? 4
         volume = UserDefaults.standard.object(forKey: "playerVolume") as? Double ?? 0.8
+        if let data = UserDefaults.standard.data(forKey: "equalizerSettings"),
+           var saved = try? JSONDecoder().decode(EqualizerSettings.self, from: data) {
+            saved.normalize()
+            equalizerSettings = saved
+        }
         for p in players {
             p.volume = Float(volume)
         }
@@ -267,6 +303,8 @@ final class PlayerController: ObservableObject {
             p.pause()
             p.replaceCurrentItem(with: nil)
         }
+        tapStates = [nil, nil]
+        pendingTapItems = [nil, nil]
         removeEndObserver()
         queue = []
         originalQueue = []
@@ -288,6 +326,33 @@ final class PlayerController: ObservableObject {
         return client?.streamURL(id: song.id)
     }
 
+    private func attachEqualizer(to item: AVPlayerItem, playerIndex: Int) {
+        guard equalizerSettings.enabled, tapStates[playerIndex] == nil else { return }
+        let itemID = ObjectIdentifier(item)
+        guard pendingTapItems[playerIndex] != itemID else { return }
+        pendingTapItems[playerIndex] = itemID
+        Task { [weak self, weak item] in
+            defer {
+                if self?.pendingTapItems[playerIndex] == itemID {
+                    self?.pendingTapItems[playerIndex] = nil
+                }
+            }
+            guard let self, let item,
+                  let track = try? await item.asset.loadTracks(withMediaType: .audio).first,
+                  self.players[playerIndex].currentItem === item,
+                  self.equalizerSettings.enabled,
+                  self.tapStates[playerIndex] == nil else { return }
+            let state = EqualizerTapState(settings: self.equalizerSettings)
+            guard let tap = state.makeTap() else { return }
+            let parameters = AVMutableAudioMixInputParameters(track: track)
+            parameters.audioTapProcessor = tap
+            let mix = AVMutableAudioMix()
+            mix.inputParameters = [parameters]
+            item.audioMix = mix
+            self.tapStates[playerIndex] = state
+        }
+    }
+
     private func startPlayback(autoplay: Bool = true, at position: Double = 0) {
         cancelCrossfade()
         guard let song = currentSong, let url = playbackURL(for: song) else { return }
@@ -297,6 +362,9 @@ final class PlayerController: ObservableObject {
         addEndObserver(for: item)
 
         activePlayer.replaceCurrentItem(with: item)
+        tapStates[activeIdx] = nil
+        pendingTapItems[activeIdx] = nil
+        attachEqualizer(to: item, playerIndex: activeIdx)
         activePlayer.volume = Float(volume)
         restoringPosition = position > 0 ? position : nil
         if position > 0 {
@@ -420,6 +488,9 @@ final class PlayerController: ObservableObject {
         removeEndObserver()
         let item = AVPlayerItem(url: url)
         incoming.replaceCurrentItem(with: item)
+        tapStates[inIdx] = nil
+        pendingTapItems[inIdx] = nil
+        attachEqualizer(to: item, playerIndex: inIdx)
         incoming.volume = 0
         incoming.play()
 
@@ -434,10 +505,10 @@ final class PlayerController: ObservableObject {
         client?.scrobble(id: song.id, submission: false)
         updateNowPlayingInfo()
 
-        runFade(out: players[outIdx], in: incoming, over: fadeLength)
+        runFade(out: players[outIdx], in: incoming, over: fadeLength, outgoingIndex: outIdx)
     }
 
-    private func runFade(out outgoing: AVPlayer, in incoming: AVPlayer, over length: Double) {
+    private func runFade(out outgoing: AVPlayer, in incoming: AVPlayer, over length: Double, outgoingIndex: Int) {
         fadeTimer?.invalidate()
         let step = 0.05
         var elapsed = 0.0
@@ -455,6 +526,8 @@ final class PlayerController: ObservableObject {
                     timer.invalidate()
                     outgoing.pause()
                     outgoing.replaceCurrentItem(with: nil)
+                    self.tapStates[outgoingIndex] = nil
+                    self.pendingTapItems[outgoingIndex] = nil
                     self.crossfading = false
                     self.fadeOutIdx = nil
                 }
@@ -468,6 +541,8 @@ final class PlayerController: ObservableObject {
         if let outIdx = fadeOutIdx {
             players[outIdx].pause()
             players[outIdx].replaceCurrentItem(with: nil)
+            tapStates[outIdx] = nil
+            pendingTapItems[outIdx] = nil
         }
         fadeOutIdx = nil
         crossfading = false

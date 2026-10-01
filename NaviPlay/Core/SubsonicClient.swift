@@ -97,13 +97,15 @@ final class SubsonicClient {
     }
 
     func streamURL(id: String) -> URL {
-        url(for: "stream", params: ["id": id])
+        // Request original bytes for both streaming and offline downloads.
+        // OpenSubsonic defines raw as no transcoding and 0 as no bitrate limit.
+        url(for: "stream", params: ["id": id, "format": "raw", "maxBitRate": "0"])
     }
 
     /// Downloads the original server file to a URLSession temporary file and
     /// hashes it without retaining a second copy in memory or the music cache.
     func rawSongDigest(id: String) async throws -> (digest: String, size: Int64) {
-        let address = url(for: "stream", params: ["id": id, "format": "raw"])
+        let address = streamURL(id: id)
         var request = URLRequest(url: address)
         request.cachePolicy = .reloadIgnoringLocalCacheData
         request.timeoutInterval = 120

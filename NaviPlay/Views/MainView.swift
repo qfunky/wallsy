@@ -19,13 +19,12 @@ struct MainView: View {
     @EnvironmentObject private var player: PlayerController
     @EnvironmentObject private var router: Router
 
-    @State private var selection: SidebarSection = .home
     @State private var showQueue = false
 
     var body: some View {
         VStack(spacing: 0) {
             HStack(spacing: 0) {
-                Sidebar(selection: $selection)
+                Sidebar(selection: $router.selection)
 
                 NavigationStack(path: $router.path) {
                     rootView
@@ -50,12 +49,12 @@ struct MainView: View {
             PlayerBar(showQueue: $showQueue)
         }
         .background(Color.spBackground)
-        .onChange(of: selection) {
+        .onChange(of: router.selection) {
             router.reset()
         }
-        .onReceive(NotificationCenter.default.publisher(for: .wallsySearch)) { _ in selection = .search }
-        .onReceive(NotificationCenter.default.publisher(for: .wallsyHome)) { _ in selection = .home }
-        .onReceive(NotificationCenter.default.publisher(for: .wallsyLiked)) { _ in selection = .liked }
+        .onReceive(NotificationCenter.default.publisher(for: .wallsySearch)) { _ in router.selection = .search }
+        .onReceive(NotificationCenter.default.publisher(for: .wallsyHome)) { _ in router.selection = .home }
+        .onReceive(NotificationCenter.default.publisher(for: .wallsyLiked)) { _ in router.selection = .liked }
         .onReceive(NotificationCenter.default.publisher(for: .wallsyQueue)) { _ in
             withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.2)) { showQueue.toggle() }
         }
@@ -63,7 +62,7 @@ struct MainView: View {
 
     @ViewBuilder
     private var rootView: some View {
-        switch selection {
+        switch router.selection {
         case .home:
             HomeView()
         case .search:
@@ -107,7 +106,6 @@ struct Sidebar: View {
     @EnvironmentObject private var router: Router
     @Binding var selection: SidebarSection
 
-    @State private var showSettings = false
     @State private var showNewPlaylist = false
     @State private var newPlaylistName = ""
 
@@ -125,13 +123,13 @@ struct Sidebar: View {
             HStack(spacing: 11) {
                 Image(systemName: "waveform")
                     .font(.system(size: 18, weight: .semibold))
-                    .foregroundColor(.white)
+                    .foregroundColor(.spText)
                     .frame(width: 34, height: 34)
                     .background(RoundedRectangle(cornerRadius: 10).fill(Color.spAccentFill))
                 VStack(alignment: .leading, spacing: 1) {
                     Text("Wallsy")
                         .font(.system(size: 17, weight: .bold, design: .rounded))
-                        .foregroundColor(.white)
+                        .foregroundColor(.spText)
                     Text("YOUR MUSIC")
                         .font(.system(size: 9, weight: .semibold))
                         .tracking(1.7)
@@ -219,11 +217,11 @@ struct Sidebar: View {
                     .foregroundColor(.spSubtext)
                 Text(app.username)
                     .font(.system(size: 13, weight: .medium))
-                    .foregroundColor(.white)
+                    .foregroundColor(.spText)
                     .lineLimit(1)
                 Spacer()
                 Button {
-                    showSettings = true
+                    app.showSettings = true
                 } label: {
                     Image(systemName: "gearshape.fill")
                         .font(.system(size: 13))
@@ -232,6 +230,8 @@ struct Sidebar: View {
                 .buttonStyle(.plain)
                 .help("Settings")
                 Button {
+                    router.selection = .home
+                    router.reset()
                     app.logout()
                 } label: {
                     Image(systemName: "rectangle.portrait.and.arrow.right")
@@ -249,9 +249,6 @@ struct Sidebar: View {
         .background(Color.spCard)
         .overlay(alignment: .trailing) {
             Color.spBorder.frame(width: 1)
-        }
-        .sheet(isPresented: $showSettings) {
-            SettingsView()
         }
         .alert("New Playlist", isPresented: $showNewPlaylist) {
             TextField("Playlist name", text: $newPlaylistName)
@@ -342,12 +339,12 @@ private struct SidebarRow: View {
                     .lineLimit(1)
                 Spacer(minLength: 0)
             }
-            .foregroundColor(isSelected ? .white : (hovering ? .white : .spSubtext))
+            .foregroundColor(isSelected ? .spText : (hovering ? .spText : .spSubtext))
             .padding(.horizontal, 14)
             .padding(.vertical, 9)
             .background(
                 RoundedRectangle(cornerRadius: 11, style: .continuous)
-                    .fill(isSelected ? Color.spAccentFill.opacity(0.7) : (hovering ? Color.white.opacity(0.045) : Color.clear))
+                    .fill(isSelected ? Color.spAccentFill.opacity(0.7) : (hovering ? Color.spSubtleFill : Color.clear))
             )
             .overlay {
                 RoundedRectangle(cornerRadius: 11, style: .continuous)
@@ -371,7 +368,7 @@ struct QueueView: View {
             HStack {
                 Text("Queue")
                     .font(.system(size: 16, weight: .bold))
-                    .foregroundColor(.white)
+                    .foregroundColor(.spText)
                 Spacer()
                 if player.queue.count > (player.currentIndex ?? -1) + 1 {
                     Button("Clear") {
@@ -427,7 +424,7 @@ private struct QueueRow: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(song.title)
                     .font(.system(size: 13))
-                    .foregroundColor(isCurrent ? .spAccent : .white)
+                    .foregroundColor(isCurrent ? .spAccent : .spText)
                     .lineLimit(1)
                 Text(song.artist ?? "")
                     .font(.system(size: 11))
@@ -445,7 +442,7 @@ private struct QueueRow: View {
         .padding(.vertical, 5)
         .background(
             RoundedRectangle(cornerRadius: 5)
-                .fill(hovering ? Color.white.opacity(0.08) : Color.clear)
+                .fill(hovering ? Color.spSubtleFill : Color.clear)
         )
         .contentShape(Rectangle())
         .onTapGesture(count: 2, perform: onSelect)

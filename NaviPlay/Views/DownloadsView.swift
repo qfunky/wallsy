@@ -28,7 +28,7 @@ struct DownloadsView: View {
                             .frame(width: compactLists ? 112 : 200, height: compactLists ? 112 : 200)
                         Image(systemName: "arrow.down.circle.fill")
                             .font(.system(size: compactLists ? 40 : 64))
-                            .foregroundColor(.white)
+                            .foregroundColor(.spText)
                     }
                     .shadow(color: .black.opacity(0.5), radius: 20, y: 8)
 
@@ -39,7 +39,7 @@ struct DownloadsView: View {
                             .foregroundColor(.spSubtext)
                         Text("Downloads")
                             .font(.system(size: 36, weight: .heavy))
-                            .foregroundColor(.white)
+                            .foregroundColor(.spText)
                         Text("\(songs.count) tracks • \(ByteCountFormatter.string(fromByteCount: downloads.cacheSizeBytes, countStyle: .file))")
                             .font(.system(size: 13))
                             .foregroundColor(.spSubtext)

@@ -283,8 +283,7 @@ final class DownloadManager: ObservableObject {
     private func downloadOne(_ song: Song) async -> Bool {
         guard let client else { return false }
         if isCached(song) { return true }
-        // format=raw asks Navidrome for the original file (no transcoding).
-        let url = client.url(for: "stream", params: ["id": song.id, "format": "raw"])
+        let url = client.streamURL(id: song.id)
 
         // Sanitize server-provided values before using them as a filename.
         let safeId = Self.safeKey(song.id)

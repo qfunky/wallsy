@@ -11,7 +11,7 @@ struct LoginView: View {
     var body: some View {
         ZStack {
             LinearGradient(
-                colors: [Color(red: 0.08, green: 0.14, blue: 0.11), .spBackground, .spBackground],
+                colors: [Color.spAccentFill.opacity(0.35), .spBackground, .spBackground],
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
             )
@@ -26,11 +26,11 @@ struct LoginView: View {
                             .shadow(color: Color.spAccentFill.opacity(0.22), radius: 20, y: 8)
                         Image(systemName: "music.note")
                             .font(.system(size: 28, weight: .bold))
-                            .foregroundColor(.white)
+                            .foregroundColor(.spText)
                     }
                     Text("Wallsy")
                         .font(.system(size: 30, weight: .bold))
-                        .foregroundColor(.white)
+                        .foregroundColor(.spText)
                     Text("Connect to your Navidrome server")
                         .font(.system(size: 13))
                         .foregroundColor(.spSubtext)
@@ -57,10 +57,10 @@ struct LoginView: View {
                                                 .font(.system(size: 11, weight: .semibold))
                                                 .lineLimit(1)
                                         }
-                                        .foregroundColor(.white)
+                                        .foregroundColor(.spText)
                                         .padding(.horizontal, 10)
                                         .padding(.vertical, 6)
-                                        .background(Capsule().fill(Color.white.opacity(0.1)))
+                                        .background(Capsule().fill(Color.spSubtleFill))
                                     }
                                     .buttonStyle(.plain)
                                 }
@@ -84,7 +84,7 @@ struct LoginView: View {
                             .padding(10)
                             .background(
                                 RoundedRectangle(cornerRadius: 6)
-                                    .fill(Color.white.opacity(0.08))
+                                    .fill(Color.spSubtleFill)
                             )
                             .onSubmit(submit)
                     }
@@ -115,7 +115,7 @@ struct LoginView: View {
                         } else {
                             Text("Connect")
                                 .font(.system(size: 15, weight: .bold))
-                                .foregroundColor(.white)
+                                .foregroundColor(.spText)
                         }
                     }
                 }
@@ -157,7 +157,7 @@ struct LoginView: View {
                 .padding(10)
                 .background(
                     RoundedRectangle(cornerRadius: 6)
-                        .fill(Color.white.opacity(0.08))
+                        .fill(Color.spSubtleFill)
                 )
                 .autocorrectionDisabled()
                 .onSubmit(submit)

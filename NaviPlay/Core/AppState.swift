@@ -11,6 +11,7 @@ enum Route: Hashable {
 @MainActor
 final class Router: ObservableObject {
     @Published var path: [Route] = []
+    @Published var selection: SidebarSection = .home
 
     func go(_ route: Route) {
         path.append(route)
@@ -28,6 +29,9 @@ final class AppState: ObservableObject {
     @Published var isBusy = false
     @Published var loginError: String?
     @Published var playlists: [Playlist] = []
+    @Published var showSettings = false
+    @Published var playlistPickerSong: Song?
+    @Published var playlistActionMessage: String?
     @Published var starredSongIDs: Set<String> = []
     /// Bumped whenever a custom playlist cover changes, to refresh views.
     @Published var coverVersion = 0
@@ -158,8 +162,12 @@ final class AppState: ObservableObject {
         guard let client else { return }
         async let playlistsTask = client.playlists()
         async let starredTask = client.starredSongs()
-        playlists = (try? await playlistsTask) ?? []
-        starredSongIDs = Set(((try? await starredTask) ?? []).map(\.id))
+        if let latestPlaylists = try? await playlistsTask {
+            playlists = latestPlaylists
+        }
+        if let latestStarred = try? await starredTask {
+            starredSongIDs = Set(latestStarred.map(\.id))
+        }
     }
 
     // MARK: - Custom playlist covers (stored locally; the server has no API for this)
@@ -201,8 +209,14 @@ final class AppState: ObservableObject {
 
     func addSongs(_ songIds: [String], toPlaylist playlistId: String) async {
         guard let client, !songIds.isEmpty else { return }
-        try? await client.addToPlaylist(id: playlistId, songIds: songIds)
-        await refreshLibrary()
+        do {
+            try await client.addToPlaylist(id: playlistId, songIds: songIds)
+            await refreshLibrary()
+            let count = songIds.count
+            playlistActionMessage = count == 1 ? "Track added to playlist." : "\(count) tracks added to playlist."
+        } catch {
+            playlistActionMessage = "Could not add to playlist: \(error.localizedDescription)"
+        }
     }
 
     func deletePlaylist(_ playlistId: String) async {

@@ -51,7 +51,7 @@ struct AlbumDetailView: View {
                     .foregroundColor(.spSubtext)
                 Text(album.name)
                     .font(.system(size: 36, weight: .heavy))
-                    .foregroundColor(.white)
+                    .foregroundColor(.spText)
                     .lineLimit(2)
 
                 HStack(spacing: 4) {
@@ -61,11 +61,11 @@ struct AlbumDetailView: View {
                         }
                         .buttonStyle(.plain)
                         .font(.system(size: 13, weight: .semibold))
-                        .foregroundColor(.white)
+                        .foregroundColor(.spText)
                     } else if let artist = album.artist {
                         Text(artist)
                             .font(.system(size: 13, weight: .semibold))
-                            .foregroundColor(.white)
+                            .foregroundColor(.spText)
                     }
                     Text(metaLine(album))
                         .font(.system(size: 13))

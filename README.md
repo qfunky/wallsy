@@ -16,13 +16,13 @@ Built with SwiftUI · Apple Silicon only · macOS 14+
 
 ## Features
 
-🎵 **Minimal macOS interface** — charcoal and muted emerald theme, sidebar navigation, home shelves, bottom player bar, compact track lists, adjustable interface zoom (70–130%, ⌘+/⌘−)
+🎵 **Minimal macOS interface** — seven selectable themes (three green, three dark, and light) in Settings → Appearance, sidebar navigation, home shelves, bottom player bar, compact track lists, adjustable interface zoom (70–130%, ⌘+/⌘−)
 
-▶️ **Player** — gapless streaming via AVPlayer, crossfade (0–12 s, configurable), queue with Play Next / Add to Queue, shuffle, repeat (off / all / one), wrap-around track navigation, media keys and the macOS Now Playing widget with artwork
+▶️ **Player** — original-quality streaming via AVPlayer, crossfade (0–12 s, configurable), a real-time equalizer with 3-band and 10-band modes and independent presets, queue with Play Next / Add to Queue, shuffle, repeat (off / all / one), wrap-around track navigation, media keys and the macOS Now Playing widget with artwork
 
 📚 **Library** — full track list with instant multi-select (⌘/⇧-click), indexed artist browser, search, Liked Songs synced with the server, listening statistics (top tracks / artists / albums, play counts)
 
-🎛 **Playlists** — create from multi-selection or drag-and-drop onto the sidebar, reorder tracks by dragging, remove tracks, custom cover images, create empty playlists via right-click
+🎛 **Playlists** — add tracks from search or other lists through the right-click menu or the ⋯ button beside the heart and choose a playlist in a dedicated picker, create from multi-selection or drag-and-drop onto the sidebar, reorder tracks by dragging, remove tracks, custom cover images, create empty playlists via right-click
 
 ⬇️ **Offline mode** — download playlists to a local cache (original files, no transcoding), pause and resume downloads, retry transient failures, and keep partial files for resumption. Cached music plays without a network connection.
 
@@ -114,6 +114,8 @@ Wallsy speaks the **Subsonic API** (`v1.16.1`, JSON), so it also works with Airs
 The last queue and playback position are restored paused for the same server account. Navidrome's Subsonic API cannot remove audio files from server storage, so the duplicate scanner only prepares a review report. Check the real server paths before removing files; Navidrome may report virtual paths. Tracks without a reported file size cannot be checked by this scan.
 
 > Note: custom playlist covers are stored locally — the Subsonic API has no endpoint for uploading playlist artwork.
+
+Playback and offline downloads request `format=raw` with no bitrate limit, so Navidrome sends the original file without server transcoding. The equalizer processes decoded audio only while playing; it never changes the files on the server or in the offline cache. Turn it off for unprocessed playback. Actual output sample rate still depends on macOS and the selected audio device.
 
 ## License
 

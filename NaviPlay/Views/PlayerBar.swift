@@ -37,7 +37,7 @@ struct PlayerBar: View {
                 VStack(alignment: .leading, spacing: 3) {
                     Text(song.title)
                         .font(.system(size: 13, weight: .semibold))
-                        .foregroundColor(.white)
+                        .foregroundColor(.spText)
                         .lineLimit(1)
                     if let artist = song.artist {
                         Button {
@@ -103,7 +103,7 @@ struct PlayerBar: View {
                             .shadow(color: Color.spAccentFill.opacity(0.2), radius: 8, y: 2)
                         Image(systemName: player.isPlaying ? "pause.fill" : "play.fill")
                             .font(.system(size: 13, weight: .bold))
-                            .foregroundColor(.white)
+                            .foregroundColor(.spText)
                     }
                 }
                 .buttonStyle(.plain)

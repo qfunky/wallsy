@@ -65,7 +65,7 @@ struct ArtistDetailView: View {
                     .foregroundColor(.spSubtext)
                 Text(artist.name)
                     .font(.system(size: 40, weight: .heavy))
-                    .foregroundColor(.white)
+                    .foregroundColor(.spText)
                     .lineLimit(2)
                 if let count = artist.albumCount {
                     Text("\(count) albums")
@@ -82,7 +82,7 @@ struct ArtistDetailView: View {
                             .fontWeight(.bold)
                     }
                     .font(.system(size: 13))
-                    .foregroundColor(.white)
+                    .foregroundColor(.spText)
                     .padding(.horizontal, 22)
                     .padding(.vertical, 10)
                     .background(Capsule().fill(Color.spAccentFill))

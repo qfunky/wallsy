@@ -94,7 +94,7 @@ struct PlaylistDetailView: View {
                     .foregroundColor(.spSubtext)
                 Text(playlist.name)
                     .font(.system(size: 36, weight: .heavy))
-                    .foregroundColor(.white)
+                    .foregroundColor(.spText)
                     .lineLimit(2)
                 if let comment = playlist.comment, !comment.isEmpty {
                     Text(comment)
@@ -240,7 +240,7 @@ struct LikedSongsView: View {
                             .frame(width: 200, height: 200)
                         Image(systemName: "heart.fill")
                             .font(.system(size: 64))
-                            .foregroundColor(.white)
+                            .foregroundColor(.spText)
                     }
                     .shadow(color: .black.opacity(0.5), radius: 20, y: 8)
 
@@ -251,7 +251,7 @@ struct LikedSongsView: View {
                             .foregroundColor(.spSubtext)
                         Text("Liked Songs")
                             .font(.system(size: 36, weight: .heavy))
-                            .foregroundColor(.white)
+                            .foregroundColor(.spText)
                         Text("\(songs.count) songs")
                             .font(.system(size: 13))
                             .foregroundColor(.spSubtext)

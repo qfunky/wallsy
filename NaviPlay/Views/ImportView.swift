@@ -26,7 +26,7 @@ struct ImportView: View {
             VStack(alignment: .leading, spacing: 18) {
                 Text("Import Playlists")
                     .font(.system(size: 30, weight: .bold))
-                    .foregroundColor(.white)
+                    .foregroundColor(.spText)
 
                 Text("Move your Spotify playlists from Exportify CSV files. Wallsy matches library tracks first, then downloads missing tracks through SpotFetch and saves a report for retrying unmatched songs.")
                     .font(.system(size: 12))
@@ -50,7 +50,7 @@ struct ImportView: View {
                                     .foregroundColor(.spAccent)
                                 Text(url.lastPathComponent)
                                     .font(.system(size: 12))
-                                    .foregroundColor(.white)
+                                    .foregroundColor(.spText)
                                 Spacer()
                                 Button {
                                     csvFiles.removeAll { $0 == url }
@@ -127,7 +127,7 @@ struct ImportView: View {
                     } label: {
                         Label(runner.isRunning ? "Running…" : "Run Import", systemImage: "play.fill")
                             .font(.system(size: 13, weight: .bold))
-                            .foregroundColor(.white)
+                            .foregroundColor(.spText)
                             .padding(.horizontal, 18)
                             .padding(.vertical, 8)
                             .background(Capsule().fill(canRun ? Color.spAccentFill : Color.spAccentFill.opacity(0.35)))
@@ -196,6 +196,9 @@ struct ImportView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .background(Color.spBackground)
+        .onChange(of: runner.didFinish) {
+            if runner.didFinish { Task { await app.refreshLibrary() } }
+        }
         .fileImporter(isPresented: $showCSVPicker,
                       allowedContentTypes: [.commaSeparatedText, .plainText],
                       allowsMultipleSelection: true) { result in
@@ -276,7 +279,7 @@ struct ImportView: View {
                     .foregroundColor(.spSubtext)
                 Text(value)
                     .font(.system(size: 12))
-                    .foregroundColor(.white)
+                    .foregroundColor(.spText)
                     .lineLimit(1)
                     .truncationMode(.middle)
             }

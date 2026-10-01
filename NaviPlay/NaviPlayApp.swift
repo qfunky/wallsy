@@ -8,6 +8,7 @@ struct NaviPlayApp: App {
     @StateObject private var router = Router()
     @StateObject private var downloads = DownloadManager()
     @AppStorage("uiScale") private var uiScale = 1.0
+    @AppStorage("appTheme") private var themeName = AppTheme.emerald.rawValue
 
     init() {
         // AsyncImage uses URLSession.shared, separate from SubsonicClient's API cache.
@@ -18,13 +19,37 @@ struct NaviPlayApp: App {
     var body: some Scene {
         WindowGroup {
             RootView()
+                .id(themeName)
                 .environmentObject(app)
                 .environmentObject(player)
                 .environmentObject(router)
                 .environmentObject(downloads)
-                .preferredColorScheme(.dark)
+                .preferredColorScheme(AppTheme(rawValue: themeName)?.isLight == true ? .light : .dark)
                 .tint(.spAccent)
                 .frame(minWidth: 1020, minHeight: 660)
+                .sheet(isPresented: $app.showSettings) {
+                    SettingsView()
+                        .environmentObject(app)
+                        .environmentObject(player)
+                        .environmentObject(router)
+                        .environmentObject(downloads)
+                        .preferredColorScheme(AppTheme(rawValue: themeName)?.isLight == true ? .light : .dark)
+                        .tint(.spAccent)
+                }
+                .sheet(item: $app.playlistPickerSong) { song in
+                    PlaylistPickerView(song: song)
+                        .environmentObject(app)
+                        .preferredColorScheme(AppTheme(rawValue: themeName)?.isLight == true ? .light : .dark)
+                        .tint(.spAccent)
+                }
+                .alert("Playlist", isPresented: Binding(
+                    get: { app.playlistActionMessage != nil },
+                    set: { if !$0 { app.playlistActionMessage = nil } }
+                )) {
+                    Button("OK") { app.playlistActionMessage = nil }
+                } message: {
+                    Text(app.playlistActionMessage ?? "")
+                }
         }
         .commands {
             CommandMenu("Navigation") {
